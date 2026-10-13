@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://cfbcm6kglkjnu"]
+
+[ext_resource type="Script" uid="uid://b6w7g8sk2texi" path="res://scripts/systems/tacticaltest.gd" id="1_6rrj5"]
+[ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="2_hdq11"]
+[ext_resource type="Script" uid="uid://dln3vvebb2ros" path="res://scripts/systems/tactical_enemy.gd" id="3_wsvxu"]
+
+[node name="TacticalTest" type="Node2D" unique_id=76008526]
+script = ExtResource("1_6rrj5")
+
+[node name="PlayerMarker" type="Node2D" parent="." unique_id=1442685418]
+script = ExtResource("2_hdq11")
+
+[node name="EnemyMarker" type="Node2D" parent="." unique_id=1841397241]
+script = ExtResource("3_wsvxu")

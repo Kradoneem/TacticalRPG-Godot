@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://brisn83qvcbgc"]
+
+[ext_resource type="Script" uid="uid://bydh7wg2l7j6t" path="res://scripts/core/main.gd" id="1_fgbdc"]
+
+[node name="Main" type="Node" unique_id=934134446]
+script = ExtResource("1_fgbdc")
+
+[node name="GameLayer" type="Node" parent="." unique_id=880032588]
+
+[node name="CanvasLayer" type="Node" parent="." unique_id=838711146]
+
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=1060606357]

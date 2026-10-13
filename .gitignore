@@ -1,0 +1,12 @@
+# Godot-editorcache en geïmporteerde bestanden
+.godot/
+
+# Tijdelijke editor- en systeembestanden
+*.tmp
+*.bak
+*.swp
+*~
+
+# Lokale exports/builds
+export/
+build/
