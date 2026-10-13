@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://b4k4s6ii0xp2t"]
+
+[ext_resource type="Script" uid="uid://cs4k3btu08y03" path="res://scripts/battle/battle_scene.gd" id="1_3hov6"]
+
+[node name="Control" type="Control" unique_id=1088554680]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_3hov6")

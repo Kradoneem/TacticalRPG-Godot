@@ -25,6 +25,8 @@ const CombatCommandPromptData = preload(
 	"res://scripts/ui/combat_command_prompt.gd"
 )
 
+const BATTLE_SCENE_PATH: String = "res://scenes/battle/battle_scene.tscn"
+
 enum EncounterState {
 	EXPLORATION,
 	STRATEGY_SELECTION,
@@ -213,7 +215,6 @@ func _on_enemy_detected(enemy_cell: Vector2i) -> void:
 		% [enemy_marker.squad.display_name, enemy_cell]
 	)
 
-
 func start_encounter(
 	initiator: int,
 	encounter_strategy: StringName
@@ -239,7 +240,36 @@ func start_encounter(
 			% active_encounter.active_strategy
 		)
 
-	open_combat_command_prompt()
+	SceneManager.present_game_scene(
+		BATTLE_SCENE_PATH,
+		active_encounter
+	)
+
+func on_game_presentation_finished(
+	returned_context: EncounterContext
+) -> void:
+	if returned_context == null:
+		push_warning(
+			"TacticalTest received no EncounterContext from the battle presentation."
+		)
+		return
+
+	if returned_context != active_encounter:
+		push_warning(
+			"TacticalTest received a battle result for an unexpected encounter."
+		)
+		return
+
+	active_encounter = null
+	encounter_state = EncounterState.EXPLORATION
+
+	player_marker.set_input_enabled(true)
+	enemy_marker.set_alert(false)
+
+	player_marker.refresh_visual()
+	enemy_marker.refresh_visual()
+
+	print("Battle presentation closed. Exploration resumed.")
 
 func resolve_combat_round(command_id: StringName) -> void:
 	if active_encounter == null:
