@@ -223,8 +223,7 @@ func start_encounter(
 		player_marker.squad,
 		enemy_marker.squad,
 		initiator,
-		encounter_strategy,
-		3
+		encounter_strategy
 	)
 
 	player_marker.set_input_enabled(false)
