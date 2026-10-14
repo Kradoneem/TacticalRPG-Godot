@@ -88,30 +88,57 @@ func restore_mp(amount: int) -> int:
 
 	return mp - previous_mp
 
+func learn_ability(ability_id: StringName) -> bool:
+	var ability := SkillData.get_skill(ability_id)
 
+	if ability == null:
+		return false
+
+	if knows_ability(ability_id):
+		return false
+
+	if ability.is_spell():
+		learned_spells.append(ability_id)
+	else:
+		learned_skills.append(ability_id)
+
+	return true
+
+
+func forget_ability(ability_id: StringName) -> void:
+	learned_skills.erase(ability_id)
+	learned_spells.erase(ability_id)
+
+
+func knows_ability(ability_id: StringName) -> bool:
+	return (
+		ability_id in learned_skills
+		or ability_id in learned_spells
+	)
+
+
+## Compatibility method for existing callers.
+## New game code should use learn_ability().
 func learn_skill(skill_id: StringName) -> void:
-	if skill_id in learned_skills:
-		return
-
-	learned_skills.append(skill_id)
+	learn_ability(skill_id)
 
 
-func knows_skill(skill_id: StringName) -> bool:
-	return skill_id in learned_skills
+## Compatibility method for existing callers.
+## New game code should use learn_ability().
+func learn_spell(spell_id: StringName) -> void:
+	learn_ability(spell_id)
+
 
 func forget_skill(skill_id: StringName) -> void:
 	learned_skills.erase(skill_id)
 
 
-func learn_spell(spell_id: StringName) -> void:
-	if spell_id in learned_spells:
-		return
-
-	learned_spells.append(spell_id)
-
-
 func forget_spell(spell_id: StringName) -> void:
 	learned_spells.erase(spell_id)
+
+
+func knows_skill(skill_id: StringName) -> bool:
+	return skill_id in learned_skills
 
 
 func knows_spell(spell_id: StringName) -> bool:
@@ -133,6 +160,7 @@ func get_all_learned_ability_ids() -> Array[StringName]:
 	ability_ids.append_array(learned_spells)
 
 	return ability_ids
+
 
 func gain_experience(amount: int) -> int:
 	if amount <= 0:

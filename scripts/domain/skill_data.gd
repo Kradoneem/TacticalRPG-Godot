@@ -201,8 +201,7 @@ static func get_skill(skill_id: StringName) -> Skill:
 			)
 			return null
 
-
-static func get_all_skill_ids() -> Array[StringName]:
+static func get_all_ability_ids() -> Array[StringName]:
 	return [
 		&"focused_strike",
 		&"mend",
@@ -217,3 +216,25 @@ static func get_all_skill_ids() -> Array[StringName]:
 		&"provoke",
 		&"battle_cry"
 	]
+
+static func get_all_skill_ids() -> Array[StringName]:
+	var skill_ids: Array[StringName] = []
+
+	for ability_id: StringName in get_all_ability_ids():
+		var ability := get_skill(ability_id)
+
+		if ability != null and ability.is_skill():
+			skill_ids.append(ability_id)
+
+	return skill_ids
+
+static func get_all_spell_ids() -> Array[StringName]:
+	var spell_ids: Array[StringName] = []
+
+	for ability_id: StringName in get_all_ability_ids():
+		var ability := get_skill(ability_id)
+
+		if ability != null and ability.is_spell():
+			spell_ids.append(ability_id)
+
+	return spell_ids

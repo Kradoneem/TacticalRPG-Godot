@@ -40,24 +40,24 @@ static func try_resolve_support_action(
 	if target_health_ratio > SUPPORT_HEAL_THRESHOLD:
 		return result
 
-	for skill_id: StringName in acting_unit.learned_skills:
-		var skill: Skill = SkillData.get_skill(skill_id)
+	for ability_id: StringName in acting_unit.get_all_learned_ability_ids():
+		var ability: Skill = SkillData.get_skill(ability_id)
 
-		if skill == null:
+		if ability == null:
 			continue
 
-		if skill.effect_type != Skill.EffectType.HEAL:
+		if ability.effect_type != Skill.EffectType.HEAL:
 			continue
 
-		if skill.target_type != Skill.TargetType.ALLY_SINGLE:
+		if ability.target_type != Skill.TargetType.ALLY_SINGLE:
 			continue
 
-		if not acting_unit.spend_mp(skill.mp_cost):
+		if not acting_unit.spend_mp(ability.mp_cost):
 			continue
 
 		var healing: int = CombatResolverData.calculate_skill_healing(
 			acting_unit,
-			skill
+			ability
 		)
 
 		var applied_healing: int = heal_target.heal(healing)
@@ -68,7 +68,7 @@ static func try_resolve_support_action(
 		result.set_skill_result(
 			acting_unit,
 			heal_target,
-			skill,
+			ability,
 			applied_healing
 		)
 
