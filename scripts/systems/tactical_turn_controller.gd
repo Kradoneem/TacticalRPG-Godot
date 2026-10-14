@@ -144,9 +144,11 @@ func _on_player_movement_requested(direction: Vector2i) -> void:
 	if state == State.FREE_EXPLORATION:
 		var moved_in_exploration := player_marker.move_by(direction)
 
-		if moved_in_exploration:
-			_check_for_enemy_notice()
+		if not moved_in_exploration:
+			return
 
+		_advance_free_exploration_patrols()
+		_check_for_enemy_notice()
 		return
 
 	if state != State.ALERT_PLAYER_TURN:
@@ -170,6 +172,51 @@ func _on_player_movement_requested(direction: Vector2i) -> void:
 
 	if remaining_player_movement <= 0:
 		end_player_turn()
+
+func _advance_free_exploration_patrols() -> void:
+	if state != State.FREE_EXPLORATION:
+		return
+
+	for enemy_marker: TacticalEnemy in enemy_markers:
+		if enemy_marker == null or enemy_marker.is_defeated():
+			continue
+
+		if enemy_marker.ai_mode != TacticalEnemy.AiMode.PATROL:
+			continue
+
+		var next_patrol_cell := enemy_marker.get_next_patrol_cell()
+
+		if next_patrol_cell == player_marker.cell:
+			continue
+
+		if _is_enemy_occupying_by_other_enemy(
+			next_patrol_cell,
+			enemy_marker
+		):
+			continue
+
+		if enemy_marker.advance_patrol():
+			print(
+				"%s patrolled to %s."
+				% [enemy_marker.squad.display_name, enemy_marker.cell]
+			)
+
+func _is_enemy_occupying_by_other_enemy(
+	target_cell: Vector2i,
+	excluded_enemy: TacticalEnemy
+) -> bool:
+	for enemy_marker: TacticalEnemy in enemy_markers:
+		if (
+			enemy_marker == null
+			or enemy_marker == excluded_enemy
+			or enemy_marker.is_defeated()
+		):
+			continue
+
+		if enemy_marker.cell == target_cell:
+			return true
+
+	return false
 
 func _on_player_cell_changed(
 	_previous_cell: Vector2i,
@@ -326,23 +373,37 @@ func _is_enemy_occupying(target_cell: Vector2i) -> bool:
 
 	return false
 
-func _begin_enemy_turn(enemy_marker: TacticalEnemy) -> void:
+func _begin_enemy_turn(active_enemy_marker: TacticalEnemy) -> void:
 	state = State.ALERT_ENEMY_TURNS
 	player_marker.set_input_enabled(false)
 
 	state_changed.emit(state)
-	enemy_turn_started.emit(enemy_marker)
+	enemy_turn_started.emit(active_enemy_marker)
 
-	print(
-		"%s turn — STATIC. Initiative: %d."
-		% [
-			enemy_marker.squad.display_name,
-			enemy_marker.squad.get_alert_initiative()
-		]
-	)
+	if active_enemy_marker.ai_mode == TacticalEnemy.AiMode.PATROL:
+		var next_patrol_cell := active_enemy_marker.get_next_patrol_cell()
 
-	## PATROL is deliberately added in the next milestone.
-	## STATIC consumes its turn without changing its grid-anchor.
+		if (
+			next_patrol_cell != player_marker.cell
+			and not _is_enemy_occupying_by_other_enemy(
+				next_patrol_cell,
+				active_enemy_marker
+			)
+		):
+			active_enemy_marker.advance_patrol()
+
+		print(
+			"%s turn — PATROL at %s."
+			% [
+				active_enemy_marker.squad.display_name,
+				active_enemy_marker.cell
+			]
+		)
+	else:
+		print(
+			"%s turn — STATIC."
+			% active_enemy_marker.squad.display_name
+		)
+
 	_check_for_enemy_notice()
-
 	_advance_to_next_turn()

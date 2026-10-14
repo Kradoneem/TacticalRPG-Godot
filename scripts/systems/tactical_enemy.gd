@@ -8,6 +8,11 @@ extends Node2D
 signal player_detected(enemy_cell: Vector2i)
 signal player_lost
 
+enum AiMode {
+	STATIC,
+	PATROL
+}
+
 var squad: Squad
 var cell: Vector2i
 var detection_range: int
@@ -17,14 +22,21 @@ var _cell_size: float
 var _is_alert: bool = false
 var _is_defeated: bool = false
 
+var ai_mode: AiMode = AiMode.STATIC
+
+var _tactical_grid: TacticalGrid
+var _patrol_route: Array[Vector2i] = []
+var _patrol_index: int = 0
 
 func configure(
+	assigned_grid: TacticalGrid,
 	grid_origin: Vector2,
 	cell_size: float,
 	start_cell: Vector2i,
 	range_in_cells: int,
 	assigned_squad: Squad
 ) -> void:
+	_tactical_grid = assigned_grid
 	_grid_origin = grid_origin
 	_cell_size = cell_size
 	cell = start_cell
@@ -33,6 +45,54 @@ func configure(
 
 	position = get_cell_center(cell)
 	queue_redraw()
+
+func configure_patrol(route: Array[Vector2i]) -> void:
+	if route.size() < 2:
+		push_warning(
+			"A PATROL enemy requires at least two waypoint cells."
+		)
+		return
+
+	for waypoint: Vector2i in route:
+		if _tactical_grid == null or not _tactical_grid.is_walkable(waypoint):
+			push_warning(
+				"PATROL route contains a blocked or invalid cell: %s."
+				% waypoint
+			)
+			return
+
+	_patrol_route = route
+	_patrol_index = 0
+	ai_mode = AiMode.PATROL
+
+	if cell != _patrol_route[0]:
+		cell = _patrol_route[0]
+		position = get_cell_center(cell)
+
+	queue_redraw()
+
+func get_next_patrol_cell() -> Vector2i:
+	if ai_mode != AiMode.PATROL or _patrol_route.is_empty():
+		return cell
+
+	var next_index := (_patrol_index + 1) % _patrol_route.size()
+	return _patrol_route[next_index]
+
+func advance_patrol() -> bool:
+	if ai_mode != AiMode.PATROL or _patrol_route.is_empty():
+		return false
+
+	var next_cell := get_next_patrol_cell()
+
+	if _tactical_grid == null or not _tactical_grid.is_walkable(next_cell):
+		return false
+
+	_patrol_index = (_patrol_index + 1) % _patrol_route.size()
+	cell = next_cell
+	position = get_cell_center(cell)
+
+	queue_redraw()
+	return true
 
 
 func check_detection(player_cell: Vector2i) -> void:

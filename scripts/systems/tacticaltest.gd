@@ -103,12 +103,22 @@ func _ready() -> void:
 	)
 
 	enemy_marker.configure(
+		tactical_grid,
 		GRID_ORIGIN,
 		CELL_SIZE,
 		Vector2i(12, 5),
 		10,
 		test_enemy_squad
 	)
+
+	enemy_marker.configure_patrol([
+		Vector2i(12, 5),
+		Vector2i(11, 5),
+		Vector2i(10, 5),
+		Vector2i(9, 5),
+		Vector2i(10, 5),
+		Vector2i(11, 5)
+	])
 
 	strategy_prompt = StrategyPromptData.new()
 	add_child(strategy_prompt)
