@@ -15,6 +15,8 @@ var _hp_bar: ProgressBar
 var _mp_label: Label
 
 var _target_selection_enabled: bool = false
+var _displayed_hp: int = 0
+var _hp_tween: Tween
 
 
 func _ready() -> void:
@@ -86,6 +88,12 @@ func configure_visuals(
 
 
 func set_unit(new_unit: Unit) -> void:
+	var unit_changed := (
+		_unit == null
+		or new_unit == null
+		or _unit.unit_id != new_unit.unit_id
+	)
+
 	_unit = new_unit
 
 	if _unit == null:
@@ -97,18 +105,55 @@ func set_unit(new_unit: Unit) -> void:
 		_hp_bar.value = 0.0
 		_mp_label.text = ""
 
+		_displayed_hp = 0
 		tooltip_text = ""
 		return
 
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_name_label.text = _unit.display_name
 
-	_hp_label.text = "HP %d / %d" % [_unit.hp, _unit.max_hp]
 	_hp_bar.max_value = _unit.max_hp
-	_hp_bar.value = _unit.hp
+
+	if unit_changed or not is_node_ready():
+		_set_displayed_hp(_unit.hp)
+	else:
+		_animate_hp_to(_unit.hp)
 
 	_mp_label.text = "MP %d / %d" % [_unit.mp, _unit.max_mp]
 
+func _animate_hp_to(target_hp: int) -> void:
+	if _displayed_hp == target_hp:
+		_set_displayed_hp(target_hp)
+		return
+
+	if _hp_tween != null and _hp_tween.is_valid():
+		_hp_tween.kill()
+
+	_hp_tween = create_tween()
+	_hp_tween.set_trans(Tween.TRANS_QUAD)
+	_hp_tween.set_ease(Tween.EASE_OUT)
+
+	_hp_tween.tween_method(
+		_set_displayed_hp,
+		float(_displayed_hp),
+		float(target_hp),
+		0.35
+	)
+
+func _set_displayed_hp(new_hp: float) -> void:
+	_displayed_hp = roundi(new_hp)
+
+	if _unit == null:
+		_hp_label.text = ""
+		_hp_bar.value = 0.0
+		return
+
+	_hp_label.text = "HP %d / %d" % [
+		_displayed_hp,
+		_unit.max_hp
+	]
+
+	_hp_bar.value = _displayed_hp
 
 func set_target_selection_enabled(
 	is_enabled: bool,
