@@ -22,6 +22,8 @@ var _attack_button: Button
 var _focused_strike_button: Button
 var _target_buttons: Array[Button] = []
 var _selected_target_index: int = 0
+var _party_cards: Array[BattleUnitCard] = []
+var _enemy_cards: Array[BattleUnitCard] = []
 var _action_feedback_label: Label
 var _action_feedback_serial: int = 0
 
@@ -31,7 +33,9 @@ func _ready() -> void:
 	command_selected.connect(_on_command_selected)
 
 	_build_interface()
+	_build_formation_cards()
 	_build_action_feedback()
+	_refresh_presentation()
 
 func configure(context: EncounterContext) -> void:
 	encounter_context = context
@@ -354,13 +358,98 @@ func _create_formation_column(
 
 	return column
 
+func _build_formation_cards() -> void:
+	_party_cards.clear()
+	_enemy_cards.clear()
+
+	for slot_index in range(MAX_FORMATION_SLOTS):
+		var party_card := BattleUnitCard.new()
+		party_card.configure_visuals(
+			Color("#587aa0"),
+			Color("#b8d8ff")
+		)
+
+		_party_formation.add_child(party_card)
+		_party_cards.append(party_card)
+
+		var enemy_card := BattleUnitCard.new()
+		enemy_card.configure_visuals(
+			Color("#994d4d"),
+			Color("#ffd0ca")
+		)
+
+		enemy_card.target_requested.connect(
+			_on_enemy_target_selected
+		)
+
+		_enemy_formation.add_child(enemy_card)
+		_enemy_cards.append(enemy_card)
+
+func _get_formation_unit(
+	squad: Squad,
+	slot_index: int
+) -> Unit:
+	if squad == null or slot_index >= squad.members.size():
+		return null
+
+	return squad.members[slot_index]
+	
+
+func _refresh_formation_cards() -> void:
+	_target_buttons.clear()
+
+	var player_squad := battle_session.get_player_squad()
+	var enemy_squad := battle_session.get_enemy_squad()
+
+	var target_selection_active := (
+		battle_session.is_target_selection_active()
+	)
+
+	var selected_command_text := (
+		battle_session.get_selected_command_text()
+	)
+
+	for slot_index in range(MAX_FORMATION_SLOTS):
+		var party_card := _party_cards[slot_index]
+		var party_unit := _get_formation_unit(
+			player_squad,
+			slot_index
+		)
+
+		party_card.set_unit(party_unit)
+		party_card.set_target_selection_enabled(false, "")
+
+		var enemy_card := _enemy_cards[slot_index]
+		var enemy_unit := _get_formation_unit(
+			enemy_squad,
+			slot_index
+		)
+
+		var can_target_enemy := (
+			target_selection_active
+			and enemy_unit != null
+			and enemy_unit.is_alive()
+		)
+
+		enemy_card.set_unit(enemy_unit)
+		enemy_card.set_target_selection_enabled(
+			can_target_enemy,
+			selected_command_text
+		)
+
+		if can_target_enemy:
+			enemy_card.set_meta(
+				"target_unit_id",
+				enemy_unit.unit_id
+			)
+
+			_target_buttons.append(enemy_card)
+		elif enemy_card.has_meta("target_unit_id"):
+			enemy_card.remove_meta("target_unit_id")
+
 func _refresh_presentation() -> void:
 	if _party_formation == null or _enemy_formation == null:
 		return
-
-	_clear_formation_slots(_party_formation)
-	_clear_formation_slots(_enemy_formation)
-	_target_buttons.clear()
 
 	if battle_session == null or not battle_session.is_valid():
 		_status_label.text = "No valid battle session was received."
@@ -414,19 +503,7 @@ func _refresh_presentation() -> void:
 	else:
 		_return_button.text = "Battle in progress"
 
-	_add_formation_slots(
-		_party_formation,
-		battle_session.get_player_squad(),
-		Color("#587aa0"),
-		Color("#b8d8ff")
-	)
-
-	_add_formation_slots(
-		_enemy_formation,
-		battle_session.get_enemy_squad(),
-		Color("#994d4d"),
-		Color("#ffd0ca")
-	)
+	_refresh_formation_cards()
 
 	if battle_session.is_target_selection_active():
 		_configure_target_navigation()
@@ -434,37 +511,6 @@ func _refresh_presentation() -> void:
 	elif battle_session.can_accept_protagonist_command():
 		call_deferred("_focus_first_available_command")
 
-func _clear_formation_slots(formation: VBoxContainer) -> void:
-	for child in formation.get_children():
-		if child is Label:
-			continue
-
-		child.queue_free()
-
-
-func _add_formation_slots(
-	formation: VBoxContainer,
-	squad: Squad,
-	background_color: Color,
-	border_color: Color
-) -> void:
-	var is_enemy_formation := formation == _enemy_formation
-
-	for slot_index in range(MAX_FORMATION_SLOTS):
-		var unit: Unit = null
-
-		if squad != null and slot_index < squad.members.size():
-			unit = squad.members[slot_index]
-
-		formation.add_child(
-			_create_formation_slot(
-				slot_index,
-				unit,
-				background_color,
-				border_color,
-				is_enemy_formation
-			)
-		)
 
 func _create_formation_slot(
 	slot_index: int,
@@ -584,6 +630,29 @@ func _create_formation_slot(
 	content.add_child(mp_label)
 
 	return slot
+func _add_formation_slots(
+	formation: VBoxContainer,
+	squad: Squad,
+	background_color: Color,
+	border_color: Color
+) -> void:
+	var is_enemy_formation := formation == _enemy_formation
+
+	for slot_index in range(MAX_FORMATION_SLOTS):
+		var unit: Unit = null
+
+		if squad != null and slot_index < squad.members.size():
+			unit = squad.members[slot_index]
+
+		formation.add_child(
+			_create_formation_slot(
+				slot_index,
+				unit,
+				background_color,
+				border_color,
+				is_enemy_formation
+			)
+		)
 
 func _on_return_button_pressed() -> void:
 	if battle_session == null or not battle_session.is_finished():
