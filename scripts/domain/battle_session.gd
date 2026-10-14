@@ -16,6 +16,7 @@ const DEFAULT_MAXIMUM_PROTAGONIST_TURNS: int = 2
 enum Phase {
 	START_ABILITY,
 	PROTAGONIST_COMMAND,
+	TARGET_SELECTION,
 	MAIN_SQUAD_AUTOMATIC,
 	ENEMY_SQUAD_AUTOMATIC,
 	END_ABILITY,
@@ -29,7 +30,7 @@ var protagonist_turns_completed: int = 0
 var maximum_protagonist_turns: int
 
 var _latest_log: Array[String] = []
-
+var _selected_command_id: StringName = &""
 
 func _init(
 	new_encounter_context: EncounterContext,
@@ -124,6 +125,35 @@ func can_accept_protagonist_command() -> bool:
 		and not is_enemy_defeated()
 	)
 
+func is_target_selection_active() -> bool:
+	return (
+		phase == Phase.TARGET_SELECTION
+		and not _selected_command_id.is_empty()
+	)
+	
+func get_selected_command_text() -> String:
+	match _selected_command_id:
+		&"basic_attack":
+			return "Attack"
+
+		&"focused_strike":
+			return "Focused Strike"
+
+		_:
+			return "Unknown command"
+
+func get_targetable_enemy_units() -> Array[Unit]:
+	var targets: Array[Unit] = []
+	var enemy_squad := get_enemy_squad()
+
+	if enemy_squad == null:
+		return targets
+
+	for unit: Unit in enemy_squad.get_living_members():
+		targets.append(unit)
+
+	return targets
+
 
 func get_initiator_text() -> String:
 	if not is_valid():
@@ -143,6 +173,9 @@ func get_phase_text() -> String:
 		Phase.PROTAGONIST_COMMAND:
 			return "Protagonist command"
 
+		Phase.TARGET_SELECTION:
+			return "Target selection"
+
 		Phase.MAIN_SQUAD_AUTOMATIC:
 			return "Main Squad automatic actions"
 
@@ -157,7 +190,6 @@ func get_phase_text() -> String:
 
 		_:
 			return "Unknown phase"
-
 
 func get_latest_log_text(
 	maximum_lines: int = -1
@@ -174,30 +206,72 @@ func get_latest_log_text(
 
 	return "\n".join(lines_to_show)
 
-func submit_protagonist_command(command_id: StringName) -> void:
+func begin_enemy_target_selection(command_id: StringName) -> void:
 	_clear_log()
 
 	if not can_accept_protagonist_command():
-		_add_log("A protagonist command cannot be accepted right now.")
+		_add_log("A protagonist command cannot be selected right now.")
+		return
+
+	if command_id != &"basic_attack" and command_id != &"focused_strike":
+		_add_log("Unknown command: %s." % command_id)
+		return
+
+	if get_targetable_enemy_units().is_empty():
+		_finish_battle()
+		return
+
+	_selected_command_id = command_id
+	phase = Phase.TARGET_SELECTION
+
+	_add_log(
+		"Choose a target for %s."
+		% get_selected_command_text()
+	)
+	
+func cancel_target_selection() -> void:
+	if not is_target_selection_active():
+		return
+
+	_selected_command_id = &""
+	phase = Phase.PROTAGONIST_COMMAND
+
+	_clear_log()
+	_add_log("Target selection cancelled. Choose a command.")
+
+func confirm_enemy_target(target_unit_id: String) -> void:
+	if not is_target_selection_active():
+		_add_log("No target selection is currently active.")
 		return
 
 	var protagonist := get_protagonist()
-	var enemy_target := get_primary_enemy_target()
+	var enemy_target := _find_living_enemy_by_id(target_unit_id)
 
 	if protagonist == null or enemy_target == null:
-		_finish_battle()
+		_selected_command_id = &""
+		phase = Phase.PROTAGONIST_COMMAND
+
+		_clear_log()
+		_add_log("That target is no longer available.")
 		return
+
+	var selected_command := _selected_command_id
+
+	_clear_log()
 
 	var command_was_resolved := _resolve_protagonist_command(
 		protagonist,
 		enemy_target,
-		command_id
+		selected_command
 	)
 
 	if not command_was_resolved:
-		_add_log("Command was not resolved. Choose another action.")
+		_selected_command_id = &""
+		phase = Phase.PROTAGONIST_COMMAND
+		_add_log("Command was not resolved. Choose another command.")
 		return
 
+	_selected_command_id = &""
 	protagonist_turns_completed += 1
 
 	if _finish_if_required():
@@ -225,6 +299,12 @@ func submit_protagonist_command(command_id: StringName) -> void:
 		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
 	)
 
+func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
+	for unit: Unit in get_targetable_enemy_units():
+		if unit.unit_id == target_unit_id:
+			return unit
+
+	return null
 
 func _resolve_protagonist_command(
 	protagonist: Unit,

@@ -19,6 +19,7 @@ var _status_label: Label
 var _return_button: Button
 var _attack_button: Button
 var _focused_strike_button: Button
+var _target_buttons: Array[Button] = []
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -280,40 +281,41 @@ func _refresh_presentation() -> void:
 
 	_clear_formation_slots(_party_formation)
 	_clear_formation_slots(_enemy_formation)
+	_target_buttons.clear()
 
 	if battle_session == null or not battle_session.is_valid():
 		_status_label.text = "No valid battle session was received."
 		_return_button.disabled = true
-
-		if _attack_button != null:
-			_attack_button.disabled = true
-
-		if _focused_strike_button != null:
-			_focused_strike_button.disabled = true
-
+		_attack_button.disabled = true
+		_focused_strike_button.disabled = true
 		return
 
 	var protagonist := battle_session.get_protagonist()
-	var enemy_target := battle_session.get_primary_enemy_target()
+	var primary_enemy := battle_session.get_primary_enemy_target()
 
 	var protagonist_name := "Unknown commander"
-	var enemy_name := "No living enemy"
+	var target_text := "No living enemy"
 
 	if protagonist != null:
 		protagonist_name = protagonist.display_name
 
-	if enemy_target != null:
-		enemy_name = enemy_target.display_name
+	if battle_session.is_target_selection_active():
+		target_text = (
+			"Choose a target for %s — arrows select, Enter confirms, Escape cancels."
+			% battle_session.get_selected_command_text()
+		)
+	elif primary_enemy != null:
+		target_text = "Primary target: %s" % primary_enemy.display_name
 
-	_status_label.text = "%s  |  Strategy: %s\nPhase: %s\nCommander: %s  |  Primary target: %s" % [
+	_status_label.text = "%s  |  Strategy: %s\nPhase: %s\nCommander: %s  |  %s" % [
 		battle_session.get_initiator_text(),
 		encounter_context.active_strategy,
 		battle_session.get_phase_text(),
 		protagonist_name,
-		enemy_name
+		target_text
 	]
 
-	var latest_log := battle_session.get_latest_log_text(4)
+	var latest_log := battle_session.get_latest_log_text(5)
 
 	if not latest_log.is_empty():
 		_status_label.text += "\n\n" + latest_log
@@ -347,7 +349,10 @@ func _refresh_presentation() -> void:
 		Color("#ffd0ca")
 	)
 
-	if battle_session.can_accept_protagonist_command():
+	if battle_session.is_target_selection_active():
+		_configure_target_navigation()
+		call_deferred("_focus_first_target")
+	elif battle_session.can_accept_protagonist_command():
 		call_deferred("_focus_first_available_command")
 
 func _clear_formation_slots(formation: VBoxContainer) -> void:
@@ -364,6 +369,8 @@ func _add_formation_slots(
 	background_color: Color,
 	border_color: Color
 ) -> void:
+	var is_enemy_formation := formation == _enemy_formation
+
 	for slot_index in range(MAX_FORMATION_SLOTS):
 		var unit: Unit = null
 
@@ -375,28 +382,88 @@ func _add_formation_slots(
 				slot_index,
 				unit,
 				background_color,
-				border_color
+				border_color,
+				is_enemy_formation
 			)
 		)
-
 
 func _create_formation_slot(
 	slot_index: int,
 	unit: Unit,
 	background_color: Color,
-	border_color: Color
-) -> PanelContainer:
-	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(350.0, 78.0)
+	border_color: Color,
+	is_enemy_formation: bool
+) -> Control:
+	var is_targetable := (
+		is_enemy_formation
+		and unit != null
+		and unit.is_alive()
+		and battle_session != null
+		and battle_session.is_target_selection_active()
+	)
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(background_color, 0.9)
-	style.border_color = border_color
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	slot.add_theme_stylebox_override("panel", style)
+	var slot: Control
+
+	if is_targetable:
+		var target_button := Button.new()
+		target_button.focus_mode = Control.FOCUS_ALL
+		target_button.custom_minimum_size = Vector2(350.0, 78.0)
+		target_button.tooltip_text = (
+			"Target %s with %s"
+			% [
+				unit.display_name,
+				battle_session.get_selected_command_text()
+			]
+		)
+
+		target_button.add_theme_stylebox_override(
+			"normal",
+			_create_command_button_style(
+				Color(background_color, 0.9),
+				border_color,
+				2
+			)
+		)
+
+		target_button.add_theme_stylebox_override(
+			"hover",
+			_create_command_button_style(
+				Color("#7a3f3f"),
+				Color("#fff0a6"),
+				3
+			)
+		)
+
+		target_button.add_theme_stylebox_override(
+			"focus",
+			_create_command_button_style(
+				Color("#7a5428"),
+				Color("#ffe183"),
+				4
+			)
+		)
+
+		target_button.pressed.connect(
+			_on_enemy_target_selected.bind(unit.unit_id)
+		)
+
+		_target_buttons.append(target_button)
+		slot = target_button
+	else:
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(350.0, 78.0)
+
+		var panel_style := StyleBoxFlat.new()
+		panel_style.bg_color = Color(background_color, 0.9)
+		panel_style.border_color = border_color
+		panel_style.set_border_width_all(2)
+		panel_style.set_corner_radius_all(8)
+
+		panel.add_theme_stylebox_override("panel", panel_style)
+		slot = panel
 
 	var content := VBoxContainer.new()
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_theme_constant_override("separation", 2)
 	slot.add_child(content)
 
@@ -413,22 +480,26 @@ func _create_formation_slot(
 
 	var name_label := Label.new()
 	name_label.text = unit.display_name
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_label.add_theme_font_size_override("font_size", 18)
 	content.add_child(name_label)
 
 	var hp_label := Label.new()
 	hp_label.text = "HP %d / %d" % [unit.hp, unit.max_hp]
+	hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(hp_label)
 
 	var hp_bar := ProgressBar.new()
 	hp_bar.max_value = unit.max_hp
 	hp_bar.value = unit.hp
 	hp_bar.show_percentage = false
+	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hp_bar.custom_minimum_size = Vector2(0.0, 12.0)
 	content.add_child(hp_bar)
 
 	var mp_label := Label.new()
 	mp_label.text = "MP %d / %d" % [unit.mp, unit.max_mp]
+	mp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mp_label.modulate = Color("#d2e3ff")
 	content.add_child(mp_label)
 
@@ -462,10 +533,72 @@ func _on_command_selected(command_id: StringName) -> void:
 	if battle_session == null:
 		return
 
-	battle_session.submit_protagonist_command(command_id)
+	battle_session.begin_enemy_target_selection(command_id)
 	_refresh_presentation()
 
+func _on_enemy_target_selected(target_unit_id: String) -> void:
+	if battle_session == null:
+		return
+
+	battle_session.confirm_enemy_target(target_unit_id)
+	_refresh_presentation()
+
+func _focus_first_target() -> void:
+	if _target_buttons.is_empty():
+		return
+
+	_target_buttons[0].grab_focus()
+	
+func _configure_target_navigation() -> void:
+	if _target_buttons.is_empty():
+		return
+
+	for target_index in range(_target_buttons.size()):
+		var current_button := _target_buttons[target_index]
+
+		var previous_index := posmod(
+			target_index - 1,
+			_target_buttons.size()
+		)
+
+		var next_index := posmod(
+			target_index + 1,
+			_target_buttons.size()
+		)
+
+		var previous_button := _target_buttons[previous_index]
+		var next_button := _target_buttons[next_index]
+
+		current_button.focus_neighbor_top = (
+			current_button.get_path_to(previous_button)
+		)
+
+		current_button.focus_neighbor_bottom = (
+			current_button.get_path_to(next_button)
+		)
+
+		current_button.focus_neighbor_left = (
+			current_button.get_path_to(previous_button)
+		)
+
+		current_button.focus_neighbor_right = (
+			current_button.get_path_to(next_button)
+		)
+
 func _unhandled_input(event: InputEvent) -> void:
+	if (
+		event is InputEventKey
+		and event.is_pressed()
+		and not event.is_echo()
+		and event.keycode == KEY_ESCAPE
+		and battle_session != null
+		and battle_session.is_target_selection_active()
+	):
+		battle_session.cancel_target_selection()
+		_refresh_presentation()
+		get_viewport().set_input_as_handled()
+		return
+
 	## Tactical movement must not leak through to the hidden tactical scene.
 	if event.is_action_pressed("move_up"):
 		get_viewport().set_input_as_handled()
