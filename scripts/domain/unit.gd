@@ -99,6 +99,40 @@ func learn_skill(skill_id: StringName) -> void:
 func knows_skill(skill_id: StringName) -> bool:
 	return skill_id in learned_skills
 
+func forget_skill(skill_id: StringName) -> void:
+	learned_skills.erase(skill_id)
+
+
+func learn_spell(spell_id: StringName) -> void:
+	if spell_id in learned_spells:
+		return
+
+	learned_spells.append(spell_id)
+
+
+func forget_spell(spell_id: StringName) -> void:
+	learned_spells.erase(spell_id)
+
+
+func knows_spell(spell_id: StringName) -> bool:
+	return spell_id in learned_spells
+
+
+func get_learned_skill_ids() -> Array[StringName]:
+	return learned_skills.duplicate()
+
+
+func get_learned_spell_ids() -> Array[StringName]:
+	return learned_spells.duplicate()
+
+
+func get_all_learned_ability_ids() -> Array[StringName]:
+	var ability_ids: Array[StringName] = []
+
+	ability_ids.append_array(learned_skills)
+	ability_ids.append_array(learned_spells)
+
+	return ability_ids
 
 func gain_experience(amount: int) -> int:
 	if amount <= 0:
