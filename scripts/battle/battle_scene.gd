@@ -10,6 +10,7 @@ signal presentation_finished(context: EncounterContext)
 signal command_selected(command_id: StringName)
 
 const MAX_FORMATION_SLOTS: int = 4
+const PROTAGONIST_ACTION_DISPLAY_SECONDS: float = 0.8
 
 var encounter_context: EncounterContext
 var battle_session: BattleSession
@@ -542,7 +543,26 @@ func _on_enemy_target_selected(target_unit_id: String) -> void:
 	if battle_session == null:
 		return
 
-	battle_session.confirm_enemy_target(target_unit_id)
+	var resolved_action := battle_session.confirm_enemy_target(
+		target_unit_id
+	)
+
+	_refresh_presentation()
+
+	if resolved_action == null or not resolved_action.is_valid():
+		return
+
+	_continue_after_protagonist_action()
+
+func _continue_after_protagonist_action() -> void:
+	await get_tree().create_timer(
+		PROTAGONIST_ACTION_DISPLAY_SECONDS
+	).timeout
+
+	if battle_session == null:
+		return
+
+	battle_session.resolve_remaining_round()
 	_refresh_presentation()
 
 func _focus_first_target() -> void:

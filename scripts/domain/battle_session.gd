@@ -277,29 +277,35 @@ func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 	if _finish_if_required():
 		return resolved_action
 
+	## BattleScene now gets time to show this action and its HP change.
 	phase = Phase.MAIN_SQUAD_AUTOMATIC
+
+	return resolved_action
+
+func resolve_remaining_round() -> void:
+	if phase != Phase.MAIN_SQUAD_AUTOMATIC:
+		return
+
 	_resolve_main_squad_automatic_actions()
 
 	if _finish_if_required():
-		return resolved_action
+		return
 
 	phase = Phase.ENEMY_SQUAD_AUTOMATIC
 	_resolve_enemy_squad_automatic_actions()
 
 	if _finish_if_required():
-		return resolved_action
+		return
 
 	if protagonist_turns_completed >= maximum_protagonist_turns:
 		_finish_battle()
-		return resolved_action
+		return
 
 	phase = Phase.PROTAGONIST_COMMAND
 	_add_log(
 		"Protagonist turn %d of %d: choose a command."
 		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
 	)
-
-	return resolved_action
 
 func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 	for unit: Unit in get_targetable_enemy_units():
