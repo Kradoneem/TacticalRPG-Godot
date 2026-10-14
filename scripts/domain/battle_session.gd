@@ -31,6 +31,8 @@ var maximum_protagonist_turns: int
 
 var _latest_log: Array[String] = []
 var _selected_command_id: StringName = &""
+var _main_squad_member_index: int = 0
+var _enemy_squad_member_index: int = 0
 
 func _init(
 	new_encounter_context: EncounterContext,
@@ -278,34 +280,12 @@ func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 		return resolved_action
 
 	## BattleScene now gets time to show this action and its HP change.
+	_main_squad_member_index = 0
+	_enemy_squad_member_index = 0
+
 	phase = Phase.MAIN_SQUAD_AUTOMATIC
 
 	return resolved_action
-
-func resolve_remaining_round() -> void:
-	if phase != Phase.MAIN_SQUAD_AUTOMATIC:
-		return
-
-	_resolve_main_squad_automatic_actions()
-
-	if _finish_if_required():
-		return
-
-	phase = Phase.ENEMY_SQUAD_AUTOMATIC
-	_resolve_enemy_squad_automatic_actions()
-
-	if _finish_if_required():
-		return
-
-	if protagonist_turns_completed >= maximum_protagonist_turns:
-		_finish_battle()
-		return
-
-	phase = Phase.PROTAGONIST_COMMAND
-	_add_log(
-		"Protagonist turn %d of %d: choose a command."
-		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
-	)
 
 func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 	for unit: Unit in get_targetable_enemy_units():
@@ -408,109 +388,161 @@ func _resolve_damage_skill(
 	_add_log(action.message)
 	return action
 
-func _resolve_main_squad_automatic_actions() -> void:
+func resolve_next_automatic_action() -> BattleAction:
+	if phase == Phase.MAIN_SQUAD_AUTOMATIC:
+		var main_squad_action := (
+			_resolve_next_main_squad_automatic_action()
+		)
+
+		if main_squad_action != null:
+			_finish_if_required()
+			return main_squad_action
+
+		if _finish_if_required():
+			return null
+
+		phase = Phase.ENEMY_SQUAD_AUTOMATIC
+		_enemy_squad_member_index = 0
+
+		return resolve_next_automatic_action()
+
+	if phase == Phase.ENEMY_SQUAD_AUTOMATIC:
+		var enemy_squad_action := (
+			_resolve_next_enemy_squad_automatic_action()
+		)
+
+		if enemy_squad_action != null:
+			_finish_if_required()
+			return enemy_squad_action
+
+		if _finish_if_required():
+			return null
+
+		_finish_automatic_round()
+		return null
+
+	return null
+
+func _resolve_next_main_squad_automatic_action() -> BattleAction:
 	var player_squad := get_player_squad()
 	var protagonist := get_protagonist()
 
 	if player_squad == null:
-		return
+		return null
 
-	for unit: Unit in player_squad.get_living_members():
-		if unit == protagonist:
+	while _main_squad_member_index < player_squad.members.size():
+		var unit: Unit = player_squad.members[_main_squad_member_index]
+		_main_squad_member_index += 1
+
+		if unit == null or not unit.is_alive() or unit == protagonist:
 			continue
 
-		var support_result := (
-			AutomaticActionResolver.try_resolve_support_action(
-				unit,
-				player_squad,
-				encounter_context.active_strategy
-			)
-		)
-
-		if support_result.was_performed:
-			_add_log(
-				"%s uses %s on %s and restores %d HP."
-				% [
-					support_result.actor.display_name,
-					support_result.skill.display_name,
-					support_result.target.display_name,
-					support_result.applied_amount
-				]
-			)
-			continue
-
-		var enemy_target := get_primary_enemy_target()
-
-		if enemy_target == null:
-			return
-
-		var damage := CombatResolverData.calculate_physical_damage(
+		return _resolve_automatic_unit_action(
 			unit,
-			enemy_target
+			player_squad,
+			encounter_context.active_strategy,
+			get_primary_enemy_target()
 		)
 
-		enemy_target.take_damage(damage)
+	return null
 
-		_add_log(
-			"%s attacks %s for %d damage."
-			% [
-				unit.display_name,
-				enemy_target.display_name,
-				damage
-			]
-		)
-
-		if is_enemy_defeated():
-			return
-
-
-func _resolve_enemy_squad_automatic_actions() -> void:
+func _resolve_next_enemy_squad_automatic_action() -> BattleAction:
 	var enemy_squad := get_enemy_squad()
 	var protagonist := get_protagonist()
 
 	if enemy_squad == null or protagonist == null:
-		return
+		return null
 
-	for enemy_unit: Unit in enemy_squad.get_living_members():
-		if not protagonist.is_alive():
-			return
+	while _enemy_squad_member_index < enemy_squad.members.size():
+		var enemy_unit: Unit = enemy_squad.members[
+			_enemy_squad_member_index
+		]
+		_enemy_squad_member_index += 1
 
-		var support_result := (
-			AutomaticActionResolver.try_resolve_support_action(
-				enemy_unit,
-				enemy_squad,
-				enemy_squad.default_strategy
-			)
-		)
-
-		if support_result.was_performed:
-			_add_log(
-				"%s uses %s on %s and restores %d HP."
-				% [
-					support_result.actor.display_name,
-					support_result.skill.display_name,
-					support_result.target.display_name,
-					support_result.applied_amount
-				]
-			)
+		if enemy_unit == null or not enemy_unit.is_alive():
 			continue
 
-		var damage := CombatResolverData.calculate_physical_damage(
+		if not protagonist.is_alive():
+			return null
+
+		return _resolve_automatic_unit_action(
 			enemy_unit,
+			enemy_squad,
+			enemy_squad.default_strategy,
 			protagonist
 		)
 
-		protagonist.take_damage(damage)
+	return null
 
-		_add_log(
-			"%s attacks %s for %d damage."
+func _resolve_automatic_unit_action(
+	acting_unit: Unit,
+	owning_squad: Squad,
+	active_strategy: StringName,
+	attack_target: Unit
+) -> BattleAction:
+	var support_result := (
+		AutomaticActionResolver.try_resolve_support_action(
+			acting_unit,
+			owning_squad,
+			active_strategy
+		)
+	)
+
+	if support_result.was_performed:
+		var healing_action := BattleAction.new()
+		healing_action.configure_healing(
+			support_result.actor,
+			support_result.target,
+			support_result.applied_amount,
+			"%s uses %s on %s and restores %d HP."
 			% [
-				enemy_unit.display_name,
-				protagonist.display_name,
-				damage
-			]
+				support_result.actor.display_name,
+				support_result.skill.display_name,
+				support_result.target.display_name,
+				support_result.applied_amount
+			],
+			support_result.skill
 		)
 
+		_add_log(healing_action.message)
+		return healing_action
+
+	if attack_target == null or not attack_target.is_alive():
+		return null
+
+	var damage := CombatResolverData.calculate_physical_damage(
+		acting_unit,
+		attack_target
+	)
+
+	attack_target.take_damage(damage)
+
+	var attack_action := BattleAction.new()
+	attack_action.configure_damage(
+		acting_unit,
+		attack_target,
+		damage,
+		"%s attacks %s for %d damage."
+		% [
+			acting_unit.display_name,
+			attack_target.display_name,
+			damage
+		]
+	)
+
+	_add_log(attack_action.message)
+	return attack_action
+
+func _finish_automatic_round() -> void:
+	if protagonist_turns_completed >= maximum_protagonist_turns:
+		_finish_battle()
+		return
+
+	phase = Phase.PROTAGONIST_COMMAND
+	_add_log(
+		"Protagonist turn %d of %d: choose a command."
+		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
+	)
 
 func _finish_if_required() -> bool:
 	if is_enemy_defeated():

@@ -559,11 +559,22 @@ func _continue_after_protagonist_action() -> void:
 		PROTAGONIST_ACTION_DISPLAY_SECONDS
 	).timeout
 
-	if battle_session == null:
-		return
+	_play_automatic_action_sequence()
 
-	battle_session.resolve_remaining_round()
-	_refresh_presentation()
+func _play_automatic_action_sequence() -> void:
+	while battle_session != null:
+		var resolved_action := (
+			battle_session.resolve_next_automatic_action()
+		)
+
+		_refresh_presentation()
+
+		if resolved_action == null:
+			return
+
+		await get_tree().create_timer(
+			PROTAGONIST_ACTION_DISPLAY_SECONDS
+		).timeout
 
 func _focus_first_target() -> void:
 	if _target_buttons.is_empty():
