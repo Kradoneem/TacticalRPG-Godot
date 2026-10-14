@@ -1,10 +1,11 @@
 extends Node2D
 
-const CombatResolver = preload("res://scripts/domain/combat_resolver.gd")
 const EncounterContextData = preload(
 	"res://scripts/domain/encounter_context.gd"
 )
-const StrategyPromptData = preload("res://scripts/ui/strategy_prompt.gd")
+const StrategyPromptData = preload(
+	"res://scripts/ui/strategy_prompt.gd"
+)
 
 const VIEWPORT_SIZE: Vector2 = Vector2(1920.0, 1080.0)
 
@@ -17,21 +18,11 @@ const CELL_SIZE: float = 120.0
 ## enemy squad can force its own encounter.
 const PLAYER_ENGAGE_RANGE: int = 3
 
-const AutomaticActionResolverData = preload(
-	"res://scripts/domain/automatic_action_resolver.gd"
-)
-
-const CombatCommandPromptData = preload(
-	"res://scripts/ui/combat_command_prompt.gd"
-)
-
 const BATTLE_SCENE_PATH: String = "res://scenes/battle/battle_scene.tscn"
 
 enum EncounterState {
 	EXPLORATION,
-	STRATEGY_SELECTION,
-	COMBAT_COMMAND,
-	COMBAT
+	STRATEGY_SELECTION
 }
 
 
@@ -41,10 +32,8 @@ enum EncounterState {
 var tactical_grid: TacticalGrid
 var test_enemy_squad: Squad
 var strategy_prompt: StrategyPrompt
-var combat_command_prompt: CombatCommandPrompt
 var active_encounter: EncounterContext
 var encounter_state: EncounterState = EncounterState.EXPLORATION
-
 
 func _ready() -> void:
 	tactical_grid = TacticalGrid.new(GRID_SIZE)
@@ -86,7 +75,7 @@ func _ready() -> void:
 	test_enemy_squad.add_member(sewer_beast)
 	test_enemy_squad.add_member(corrupted_acolyte)
 
-	var main_squad = GameState.get_main_squad()
+	var main_squad: Squad = GameState.get_main_squad()
 
 	if main_squad == null:
 		push_error("TacticalTest could not find a Main Squad in GameState.")
@@ -111,13 +100,6 @@ func _ready() -> void:
 	strategy_prompt = StrategyPromptData.new()
 	add_child(strategy_prompt)
 	strategy_prompt.strategy_selected.connect(_on_strategy_selected)
-
-	combat_command_prompt = CombatCommandPromptData.new()
-	add_child(combat_command_prompt)
-
-	combat_command_prompt.command_selected.connect(
-		_on_combat_command_selected
-	)
 
 	player_marker.cell_changed.connect(_on_player_cell_changed)
 	enemy_marker.player_detected.connect(_on_enemy_detected)
@@ -152,9 +134,11 @@ func _on_player_cell_changed(
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if encounter_state == EncounterState.EXPLORATION:
-		if event.is_action_pressed("engage"):
-			try_player_initiated_encounter()
+	if encounter_state != EncounterState.EXPLORATION:
+		return
+
+	if event.is_action_pressed("engage"):
+		try_player_initiated_encounter()
 
 
 func try_player_initiated_encounter() -> void:
@@ -184,22 +168,6 @@ func _on_strategy_selected(strategy_id: StringName) -> void:
 		strategy_id
 	)
 
-func _on_combat_command_selected(command_id: StringName) -> void:
-	if encounter_state != EncounterState.COMBAT_COMMAND:
-		return
-
-	resolve_combat_round(command_id)
-
-
-func open_combat_command_prompt() -> void:
-	var protagonist: Unit = player_marker.get_leader()
-
-	if protagonist == null or not protagonist.is_alive():
-		finish_player_defeat()
-		return
-
-	encounter_state = EncounterState.COMBAT_COMMAND
-	combat_command_prompt.open_for_unit(protagonist)
 
 func _on_enemy_detected(enemy_cell: Vector2i) -> void:
 	if encounter_state != EncounterState.EXPLORATION:
@@ -214,6 +182,7 @@ func _on_enemy_detected(enemy_cell: Vector2i) -> void:
 		"%s triggered combat at %s."
 		% [enemy_marker.squad.display_name, enemy_cell]
 	)
+
 
 func start_encounter(
 	initiator: int,
@@ -244,6 +213,7 @@ func start_encounter(
 		BATTLE_SCENE_PATH,
 		active_encounter
 	)
+
 
 func on_game_presentation_finished(
 	returned_context: EncounterContext
@@ -285,261 +255,6 @@ func on_game_presentation_finished(
 
 	print("Battle presentation closed. Exploration resumed.")
 
-func resolve_combat_round(command_id: StringName) -> void:
-	if active_encounter == null:
-		push_warning("No active encounter exists.")
-		return
-
-	var protagonist: Unit = player_marker.get_leader()
-
-	if protagonist == null or not protagonist.is_alive():
-		finish_player_defeat()
-		return
-
-	print("--- Combat round begins ---")
-
-	var enemy_target: Unit = enemy_marker.squad.get_first_living_member()
-
-	if enemy_target == null:
-		finish_player_victory()
-		return
-
-	var action_was_resolved: bool = resolve_protagonist_action(
-		protagonist,
-		enemy_target,
-		command_id
-	)
-
-	if not action_was_resolved:
-		open_combat_command_prompt()
-		return
-
-	if not enemy_marker.squad.is_alive():
-		finish_player_victory()
-		return
-
-	resolve_main_squad_automatic_turn()
-
-	if not enemy_marker.squad.is_alive():
-		finish_player_victory()
-		return
-
-	resolve_enemy_squad_automatic_turn(protagonist)
-
-	if not protagonist.is_alive():
-		finish_player_defeat()
-		return
-
-	player_marker.refresh_visual()
-	enemy_marker.refresh_visual()
-
-	print("--- Combat round ends ---")
-
-	open_combat_command_prompt()
-
-func resolve_protagonist_action(
-	protagonist: Unit,
-	enemy_target: Unit,
-	command_id: StringName
-) -> bool:
-	match command_id:
-		&"basic_attack":
-			resolve_basic_attack(
-				protagonist,
-				enemy_target,
-				"Manual action"
-			)
-
-			return true
-
-		&"focused_strike":
-			return resolve_damage_skill(
-				protagonist,
-				enemy_target,
-				&"focused_strike",
-				"Manual skill"
-			)
-
-		_:
-			push_warning("Unknown protagonist command: %s" % command_id)
-			return false
-
-
-func resolve_damage_skill(
-	attacker: Unit,
-	defender: Unit,
-	skill_id: StringName,
-	action_label: String
-) -> bool:
-	if not attacker.knows_skill(skill_id):
-		print(
-			"%s does not know %s."
-			% [attacker.display_name, skill_id]
-		)
-
-		return false
-
-	var skill: Skill = SkillData.get_skill(skill_id)
-
-	if skill == null:
-		return false
-
-	if not attacker.spend_mp(skill.mp_cost):
-		print(
-			"%s lacks MP for %s."
-			% [attacker.display_name, skill.display_name]
-		)
-
-		return false
-
-	var damage: int = CombatResolver.calculate_skill_damage(
-		attacker,
-		defender,
-		skill
-	)
-
-	defender.take_damage(damage)
-
-	print(
-		"%s — %s used %s and dealt %d damage to %s. "
-		+ "Target HP: %d/%d"
-		% [
-			action_label,
-			attacker.display_name,
-			skill.display_name,
-			damage,
-			defender.display_name,
-			defender.hp,
-			defender.max_hp
-		]
-	)
-
-	return true
-
-func resolve_main_squad_automatic_turn() -> void:
-	var protagonist: Unit = player_marker.get_leader()
-
-	print(
-		"Automatic Main Squad turn. Active strategy: %s."
-		% active_encounter.active_strategy
-	)
-
-	for unit: Unit in player_marker.squad.get_living_members():
-		if unit == protagonist:
-			continue
-
-		var support_result: AutomaticActionResult = (
-			AutomaticActionResolverData.try_resolve_support_action(
-				unit,
-				player_marker.squad,
-				active_encounter.active_strategy
-			)
-		)
-
-		if support_result.was_performed:
-			print_automatic_skill_result(support_result)
-			continue
-
-		var enemy_target: Unit = enemy_marker.squad.get_first_living_member()
-
-		if enemy_target == null:
-			return
-
-		resolve_basic_attack(unit, enemy_target, "Automatic ally action")
-
-		if not enemy_marker.squad.is_alive():
-			return
-
-func resolve_enemy_squad_automatic_turn(protagonist: Unit) -> void:
-	print(
-		"Automatic Enemy Squad turn. Active strategy: %s."
-		% enemy_marker.squad.default_strategy
-	)
-
-	for enemy_unit: Unit in enemy_marker.squad.get_living_members():
-		if not protagonist.is_alive():
-			return
-
-		var support_result: AutomaticActionResult = (
-			AutomaticActionResolverData.try_resolve_support_action(
-				enemy_unit,
-				enemy_marker.squad,
-				enemy_marker.squad.default_strategy
-			)
-		)
-
-		if support_result.was_performed:
-			print_automatic_skill_result(support_result)
-			continue
-
-		resolve_basic_attack(
-			enemy_unit,
-			protagonist,
-			"Automatic enemy action"
-		)
-
-func print_automatic_skill_result(
-	action_result: AutomaticActionResult
-) -> void:
-	var message := (
-		"Automatic support action — %s used %s on %s "
-		+ "for %d HP. Target HP: %d/%d. MP: %d/%d"
-	) % [
-		action_result.actor.display_name,
-		action_result.skill.display_name,
-		action_result.target.display_name,
-		action_result.applied_amount,
-		action_result.target.hp,
-		action_result.target.max_hp,
-		action_result.actor.mp,
-		action_result.actor.max_mp
-	]
-
-	print(message)
-
-func resolve_basic_attack(
-	attacker: Unit,
-	defender: Unit,
-	action_label: String
-) -> void:
-	var damage: int = CombatResolver.calculate_physical_damage(
-		attacker,
-		defender
-	)
-
-	defender.take_damage(damage)
-
-	print(
-		"%s — %s dealt %d damage to %s. Target HP: %d/%d"
-		% [
-			action_label,
-			attacker.display_name,
-			damage,
-			defender.display_name,
-			defender.hp,
-			defender.max_hp
-		]
-	)
-
-
-func finish_player_victory() -> void:
-	enemy_marker.set_defeated()
-	enemy_marker.refresh_visual()
-	player_marker.refresh_visual()
-
-	encounter_state = EncounterState.EXPLORATION
-	active_encounter = null
-	player_marker.set_input_enabled(true)
-
-	print("%s was defeated." % enemy_marker.squad.display_name)
-	print("Exploration resumed.")
-
-
-func finish_player_defeat() -> void:
-	player_marker.set_input_enabled(false)
-	active_encounter = null
-
-	print("The protagonist was defeated. Restart with F5.")
 
 func _on_enemy_lost_player() -> void:
 	print("The player left the enemy detection range.")
