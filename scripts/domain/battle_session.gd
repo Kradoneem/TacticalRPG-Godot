@@ -239,10 +239,10 @@ func cancel_target_selection() -> void:
 	_clear_log()
 	_add_log("Target selection cancelled. Choose a command.")
 
-func confirm_enemy_target(target_unit_id: String) -> void:
+func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 	if not is_target_selection_active():
 		_add_log("No target selection is currently active.")
-		return
+		return null
 
 	var protagonist := get_protagonist()
 	var enemy_target := _find_living_enemy_by_id(target_unit_id)
@@ -253,51 +253,53 @@ func confirm_enemy_target(target_unit_id: String) -> void:
 
 		_clear_log()
 		_add_log("That target is no longer available.")
-		return
+		return null
 
 	var selected_command := _selected_command_id
 
 	_clear_log()
 
-	var command_was_resolved := _resolve_protagonist_command(
+	var resolved_action := _resolve_protagonist_command(
 		protagonist,
 		enemy_target,
 		selected_command
 	)
 
-	if not command_was_resolved:
+	if resolved_action == null:
 		_selected_command_id = &""
 		phase = Phase.PROTAGONIST_COMMAND
 		_add_log("Command was not resolved. Choose another command.")
-		return
+		return null
 
 	_selected_command_id = &""
 	protagonist_turns_completed += 1
 
 	if _finish_if_required():
-		return
+		return resolved_action
 
 	phase = Phase.MAIN_SQUAD_AUTOMATIC
 	_resolve_main_squad_automatic_actions()
 
 	if _finish_if_required():
-		return
+		return resolved_action
 
 	phase = Phase.ENEMY_SQUAD_AUTOMATIC
 	_resolve_enemy_squad_automatic_actions()
 
 	if _finish_if_required():
-		return
+		return resolved_action
 
 	if protagonist_turns_completed >= maximum_protagonist_turns:
 		_finish_battle()
-		return
+		return resolved_action
 
 	phase = Phase.PROTAGONIST_COMMAND
 	_add_log(
 		"Protagonist turn %d of %d: choose a command."
 		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
 	)
+
+	return resolved_action
 
 func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 	for unit: Unit in get_targetable_enemy_units():
@@ -310,7 +312,7 @@ func _resolve_protagonist_command(
 	protagonist: Unit,
 	enemy_target: Unit,
 	command_id: StringName
-) -> bool:
+) -> BattleAction:
 	match command_id:
 		&"basic_attack":
 			var damage := CombatResolverData.calculate_physical_damage(
@@ -320,7 +322,11 @@ func _resolve_protagonist_command(
 
 			enemy_target.take_damage(damage)
 
-			_add_log(
+			var action := BattleAction.new()
+			action.configure_damage(
+				protagonist,
+				enemy_target,
+				damage,
 				"%s attacks %s for %d damage."
 				% [
 					protagonist.display_name,
@@ -329,7 +335,8 @@ func _resolve_protagonist_command(
 				]
 			)
 
-			return true
+			_add_log(action.message)
+			return action
 
 		&"focused_strike":
 			return _resolve_damage_skill(
@@ -341,34 +348,33 @@ func _resolve_protagonist_command(
 
 		_:
 			_add_log("Unknown command: %s." % command_id)
-			return false
-
+			return null
 
 func _resolve_damage_skill(
 	attacker: Unit,
 	defender: Unit,
 	skill_id: StringName,
 	action_name: String
-) -> bool:
+) -> BattleAction:
 	if not attacker.knows_skill(skill_id):
-		_add_log("%s does not know %s." % [
-			attacker.display_name,
-			action_name
-		])
-		return false
+		_add_log(
+			"%s does not know %s."
+			% [attacker.display_name, action_name]
+		)
+		return null
 
 	var skill := SkillData.get_skill(skill_id)
 
 	if skill == null:
 		_add_log("Skill data could not be found: %s." % skill_id)
-		return false
+		return null
 
 	if not attacker.spend_mp(skill.mp_cost):
 		_add_log(
 			"%s lacks MP for %s."
 			% [attacker.display_name, skill.display_name]
 		)
-		return false
+		return null
 
 	var damage := CombatResolverData.calculate_skill_damage(
 		attacker,
@@ -378,18 +384,23 @@ func _resolve_damage_skill(
 
 	defender.take_damage(damage)
 
-	_add_log(
+	var action := BattleAction.new()
+	action.configure_damage(
+		attacker,
+		defender,
+		damage,
 		"%s uses %s on %s for %d damage."
 		% [
 			attacker.display_name,
 			skill.display_name,
 			defender.display_name,
 			damage
-		]
+		],
+		skill
 	)
 
-	return true
-
+	_add_log(action.message)
+	return action
 
 func _resolve_main_squad_automatic_actions() -> void:
 	var player_squad := get_player_squad()
