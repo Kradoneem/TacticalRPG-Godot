@@ -7,30 +7,35 @@ extends Control
 ## It never owns tactical-grid state.
 
 signal presentation_finished(context: EncounterContext)
+signal command_selected(command_id: StringName)
 
 const MAX_FORMATION_SLOTS: int = 4
 
 var encounter_context: EncounterContext
-
+var battle_session: BattleSession
 var _party_formation: VBoxContainer
 var _enemy_formation: VBoxContainer
 var _status_label: Label
 var _return_button: Button
-
+var _attack_button: Button
+var _focused_strike_button: Button
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_build_interface()
 
+	command_selected.connect(_on_command_selected)
+
+	_build_interface()
 
 func configure(context: EncounterContext) -> void:
 	encounter_context = context
+	battle_session = BattleSession.new(encounter_context)
+	battle_session.begin_battle()
 
 	if not is_node_ready():
 		return
 
 	_refresh_presentation()
-
 
 func _build_interface() -> void:
 	var background := ColorRect.new()
@@ -41,14 +46,14 @@ func _build_interface() -> void:
 
 	var outer_margin := MarginContainer.new()
 	outer_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	outer_margin.add_theme_constant_override("margin_left", 70)
-	outer_margin.add_theme_constant_override("margin_top", 48)
-	outer_margin.add_theme_constant_override("margin_right", 70)
-	outer_margin.add_theme_constant_override("margin_bottom", 48)
+	outer_margin.add_theme_constant_override("margin_left", 42)
+	outer_margin.add_theme_constant_override("margin_top", 20)
+	outer_margin.add_theme_constant_override("margin_right", 42)
+	outer_margin.add_theme_constant_override("margin_bottom", 20)
 	add_child(outer_margin)
 
 	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 20)
+	page.add_theme_constant_override("separation", 10)
 	outer_margin.add_child(page)
 
 	var title_label := Label.new()
@@ -69,7 +74,7 @@ func _build_interface() -> void:
 
 	var formations := HBoxContainer.new()
 	formations.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	formations.add_theme_constant_override("separation", 70)
+	formations.add_theme_constant_override("separation", 40)
 	page.add_child(formations)
 
 	_party_formation = _create_formation_column(
@@ -90,10 +95,11 @@ func _build_interface() -> void:
 
 	var footer_separator := HSeparator.new()
 	page.add_child(footer_separator)
+	_build_command_hud(page)
 
 	_return_button = Button.new()
 	_return_button.text = "Return to tactical test"
-	_return_button.custom_minimum_size = Vector2(0.0, 56.0)
+	_return_button.custom_minimum_size = Vector2(0.0, 42.0)
 	_return_button.focus_mode = Control.FOCUS_ALL
 	_return_button.pressed.connect(_on_return_button_pressed)
 	page.add_child(_return_button)
@@ -109,6 +115,147 @@ func _build_interface() -> void:
 
 	_refresh_presentation()
 
+func _build_command_hud(parent: VBoxContainer) -> void:
+	var hud_panel := PanelContainer.new()
+	hud_panel.custom_minimum_size = Vector2(0.0, 72.0)
+
+	var hud_style := StyleBoxFlat.new()
+	hud_style.bg_color = Color("#10171d")
+	hud_style.border_color = Color("#71889a")
+	hud_style.set_border_width_all(2)
+	hud_style.set_corner_radius_all(8)
+	hud_panel.add_theme_stylebox_override("panel", hud_style)
+
+	parent.add_child(hud_panel)
+
+	var content := HBoxContainer.new()
+	content.add_theme_constant_override("separation", 14)
+	hud_panel.add_child(content)
+
+	var command_label := Label.new()
+	command_label.text = "COMMAND"
+	command_label.custom_minimum_size = Vector2(170.0, 0.0)
+	command_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	command_label.add_theme_font_size_override("font_size", 20)
+	content.add_child(command_label)
+
+	_attack_button = _create_command_button(
+		"Attack\nReliable physical damage"
+	)
+	_attack_button.pressed.connect(_on_attack_button_pressed)
+	content.add_child(_attack_button)
+
+	_focused_strike_button = _create_command_button(
+		"Focused Strike\nPowerful weapon technique"
+	)
+	_focused_strike_button.pressed.connect(
+		_on_focused_strike_button_pressed
+	)
+	content.add_child(_focused_strike_button)
+
+	_configure_command_navigation()
+
+func _create_command_button(button_text: String) -> Button:
+	var button := Button.new()
+	button.text = button_text
+	button.custom_minimum_size = Vector2(280.0, 52.0)
+	button.focus_mode = Control.FOCUS_ALL
+
+	button.add_theme_stylebox_override(
+		"normal",
+		_create_command_button_style(
+			Color("#27323a"),
+			Color("#61707a"),
+			2
+		)
+	)
+
+	button.add_theme_stylebox_override(
+		"hover",
+		_create_command_button_style(
+			Color("#344751"),
+			Color("#9fb7c2"),
+			2
+		)
+	)
+
+	button.add_theme_stylebox_override(
+		"focus",
+		_create_command_button_style(
+			Color("#5a5128"),
+			Color("#ffe183"),
+			4
+		)
+	)
+
+	button.add_theme_stylebox_override(
+		"pressed",
+		_create_command_button_style(
+			Color("#75652e"),
+			Color("#fff1ae"),
+			4
+		)
+	)
+
+	return button
+
+func _create_command_button_style(
+	background_color: Color,
+	border_color: Color,
+	border_width: int
+) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background_color
+	style.border_color = border_color
+	style.set_border_width_all(border_width)
+	style.set_corner_radius_all(6)
+
+	return style
+
+func _configure_command_navigation() -> void:
+	_attack_button.focus_neighbor_left = _attack_button.get_path_to(
+		_focused_strike_button
+	)
+
+	_attack_button.focus_neighbor_right = _attack_button.get_path_to(
+		_focused_strike_button
+	)
+
+	_attack_button.focus_neighbor_top = _attack_button.get_path_to(
+		_focused_strike_button
+	)
+
+	_attack_button.focus_neighbor_bottom = _attack_button.get_path_to(
+		_focused_strike_button
+	)
+
+	_focused_strike_button.focus_neighbor_left = (
+		_focused_strike_button.get_path_to(_attack_button)
+	)
+
+	_focused_strike_button.focus_neighbor_right = (
+		_focused_strike_button.get_path_to(_attack_button)
+	)
+
+	_focused_strike_button.focus_neighbor_top = (
+		_focused_strike_button.get_path_to(_attack_button)
+	)
+
+	_focused_strike_button.focus_neighbor_bottom = (
+		_focused_strike_button.get_path_to(_attack_button)
+	)
+
+func _focus_first_available_command() -> void:
+	if _attack_button != null and not _attack_button.disabled:
+		_attack_button.grab_focus()
+		return
+
+	if (
+		_focused_strike_button != null
+		and not _focused_strike_button.disabled
+	):
+		_focused_strike_button.grab_focus()
 
 func _create_formation_column(
 	formation_title: String,
@@ -127,7 +274,6 @@ func _create_formation_column(
 
 	return column
 
-
 func _refresh_presentation() -> void:
 	if _party_formation == null or _enemy_formation == null:
 		return
@@ -135,37 +281,74 @@ func _refresh_presentation() -> void:
 	_clear_formation_slots(_party_formation)
 	_clear_formation_slots(_enemy_formation)
 
-	if encounter_context == null:
-		_status_label.text = "No encounter context was received."
+	if battle_session == null or not battle_session.is_valid():
+		_status_label.text = "No valid battle session was received."
 		_return_button.disabled = true
+
+		if _attack_button != null:
+			_attack_button.disabled = true
+
+		if _focused_strike_button != null:
+			_focused_strike_button.disabled = true
+
 		return
 
-	_return_button.disabled = false
+	var protagonist := battle_session.get_protagonist()
+	var enemy_target := battle_session.get_primary_enemy_target()
 
-	var initiator_text := "Enemy initiative"
+	var protagonist_name := "Unknown commander"
+	var enemy_name := "No living enemy"
 
-	if encounter_context.was_player_initiated():
-		initiator_text = "Main Squad initiative"
+	if protagonist != null:
+		protagonist_name = protagonist.display_name
 
-	_status_label.text = "%s  |  Temporary strategy: %s" % [
-		initiator_text,
-		encounter_context.active_strategy
+	if enemy_target != null:
+		enemy_name = enemy_target.display_name
+
+	_status_label.text = "%s  |  Strategy: %s\nPhase: %s\nCommander: %s  |  Primary target: %s" % [
+		battle_session.get_initiator_text(),
+		encounter_context.active_strategy,
+		battle_session.get_phase_text(),
+		protagonist_name,
+		enemy_name
 	]
+
+	var latest_log := battle_session.get_latest_log_text(4)
+
+	if not latest_log.is_empty():
+		_status_label.text += "\n\n" + latest_log
+
+	_attack_button.disabled = not battle_session.can_accept_protagonist_command()
+
+	_focused_strike_button.disabled = (
+		protagonist == null
+		or not protagonist.knows_skill(&"focused_strike")
+		or not battle_session.can_accept_protagonist_command()
+	)
+
+	_return_button.disabled = not battle_session.is_finished()
+
+	if battle_session.is_finished():
+		_return_button.text = "Return to tactical map"
+	else:
+		_return_button.text = "Battle in progress"
 
 	_add_formation_slots(
 		_party_formation,
-		encounter_context.player_squad,
+		battle_session.get_player_squad(),
 		Color("#587aa0"),
 		Color("#b8d8ff")
 	)
 
 	_add_formation_slots(
 		_enemy_formation,
-		encounter_context.enemy_squad,
+		battle_session.get_enemy_squad(),
 		Color("#994d4d"),
 		Color("#ffd0ca")
 	)
 
+	if battle_session.can_accept_protagonist_command():
+		call_deferred("_focus_first_available_command")
 
 func _clear_formation_slots(formation: VBoxContainer) -> void:
 	for child in formation.get_children():
@@ -204,7 +387,7 @@ func _create_formation_slot(
 	border_color: Color
 ) -> PanelContainer:
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(350.0, 112.0)
+	slot.custom_minimum_size = Vector2(350.0, 78.0)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(background_color, 0.9)
@@ -214,7 +397,7 @@ func _create_formation_slot(
 	slot.add_theme_stylebox_override("panel", style)
 
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 6)
+	content.add_theme_constant_override("separation", 2)
 	slot.add_child(content)
 
 	if unit == null:
@@ -251,13 +434,36 @@ func _create_formation_slot(
 
 	return slot
 
-
 func _on_return_button_pressed() -> void:
-	if encounter_context == null:
+	if battle_session == null or not battle_session.is_finished():
 		return
 
 	presentation_finished.emit(encounter_context)
 
+func _on_attack_button_pressed() -> void:
+	if battle_session == null:
+		return
+
+	if not battle_session.can_accept_protagonist_command():
+		return
+
+	command_selected.emit(&"basic_attack")
+
+func _on_focused_strike_button_pressed() -> void:
+	if battle_session == null:
+		return
+
+	if not battle_session.can_accept_protagonist_command():
+		return
+
+	command_selected.emit(&"focused_strike")
+
+func _on_command_selected(command_id: StringName) -> void:
+	if battle_session == null:
+		return
+
+	battle_session.submit_protagonist_command(command_id)
+	_refresh_presentation()
 
 func _unhandled_input(event: InputEvent) -> void:
 	## Tactical movement must not leak through to the hidden tactical scene.
