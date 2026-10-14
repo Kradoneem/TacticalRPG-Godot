@@ -24,9 +24,15 @@ const TacticalTurnControllerData = preload(
 	"res://scripts/systems/tactical_turn_controller.gd"
 )
 
+const TacticalActionPromptData = preload(
+	"res://scripts/ui/tactical_action_prompt.gd"
+)
+
 enum EncounterState {
 	EXPLORATION,
-	STRATEGY_SELECTION
+	TACTICAL_ACTION_SELECTION,
+	STRATEGY_SELECTION,
+	BATTLE_TRANSITION
 }
 
 
@@ -39,6 +45,8 @@ var strategy_prompt: StrategyPrompt
 var active_encounter: EncounterContext
 var encounter_state: EncounterState = EncounterState.EXPLORATION
 var turn_controller
+var tactical_action_prompt: TacticalActionPrompt
+var selected_enemy_marker: TacticalEnemy
 
 func _ready() -> void:
 	tactical_grid = TacticalGrid.new(GRID_SIZE)
@@ -105,7 +113,14 @@ func _ready() -> void:
 	strategy_prompt = StrategyPromptData.new()
 	add_child(strategy_prompt)
 	strategy_prompt.strategy_selected.connect(_on_strategy_selected)
-
+	tactical_action_prompt = TacticalActionPromptData.new()
+	add_child(tactical_action_prompt)
+	tactical_action_prompt.attack_selected.connect(
+		_on_tactical_attack_selected
+	)
+	tactical_action_prompt.cancelled.connect(
+		_on_tactical_action_cancelled
+	)
 	var test_enemy_markers: Array[TacticalEnemy] = [
 		enemy_marker
 	]
@@ -117,7 +132,11 @@ func _ready() -> void:
 		player_marker,
 		test_enemy_markers
 	)
-
+	
+	turn_controller.adjacent_enemies_available.connect(
+		_on_adjacent_enemies_available
+	)
+	
 	queue_redraw()
 
 func configure_test_map() -> void:
@@ -137,72 +156,101 @@ func configure_test_map() -> void:
 			false
 		)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if turn_controller == null:
+func _unhandled_input(_event: InputEvent) -> void:
+	pass
+
+func _on_adjacent_enemies_available(
+	adjacent_enemies: Array[TacticalEnemy]
+) -> void:
+	if adjacent_enemies.is_empty():
 		return
 
-	if not turn_controller.is_free_exploration():
+	encounter_state = EncounterState.TACTICAL_ACTION_SELECTION
+	tactical_action_prompt.open_for_targets(adjacent_enemies)
+
+
+func _on_tactical_attack_selected(
+	selected_target_marker: TacticalEnemy
+) -> void:
+	if (
+		selected_target_marker == null
+		or selected_target_marker.is_defeated()
+	):
 		return
 
-	## Directe engagement is verwijderd uit de exploration-flow.
-	## In een volgende milestone opent adjacency een tactical action menu.
-	if event.is_action_pressed("engage"):
-		print(
-			"Direct engagement is unavailable. "
-			+ "Move adjacent during alert tactical state."
-		)
+	selected_enemy_marker = selected_target_marker
+	encounter_state = EncounterState.STRATEGY_SELECTION
 
+	turn_controller.begin_battle_transition()
+	strategy_prompt.open_for_squad(player_marker.squad)
+
+func _on_tactical_action_cancelled() -> void:
+	encounter_state = EncounterState.EXPLORATION
+	turn_controller.cancel_tactical_action_menu()
 
 func _on_strategy_selected(strategy_id: StringName) -> void:
+	if selected_enemy_marker == null:
+		push_warning(
+			"Strategy was selected without a tactical enemy target."
+		)
+		return
+
+	encounter_state = EncounterState.BATTLE_TRANSITION
+
 	start_encounter(
 		EncounterContext.Initiator.PLAYER,
 		strategy_id
 	)
 
-
 func start_encounter(
 	initiator: int,
 	encounter_strategy: StringName
 ) -> void:
+	if selected_enemy_marker == null:
+		push_error("Cannot start an encounter without a selected enemy squad.")
+		return
+
 	active_encounter = EncounterContextData.new(
 		player_marker.squad,
-		enemy_marker.squad,
+		selected_enemy_marker.squad,
 		initiator,
 		encounter_strategy
 	)
 
 	player_marker.set_input_enabled(false)
-	enemy_marker.set_alert(true)
+	selected_enemy_marker.set_alert(true)
 
-	if active_encounter.was_player_initiated():
-		print(
-			"Main Squad initiated combat using %s strategy."
-			% active_encounter.active_strategy
-		)
-	else:
-		print(
-			"Enemy initiated combat. Main Squad retains %s strategy."
-			% active_encounter.active_strategy
-		)
+	print(
+		"Main Squad initiated combat against %s using %s strategy."
+		% [
+			selected_enemy_marker.squad.display_name,
+			active_encounter.active_strategy
+		]
+	)
 
 	SceneManager.present_game_scene(
 		BATTLE_SCENE_PATH,
 		active_encounter
 	)
 
-
 func on_game_presentation_finished(
 	returned_context: EncounterContext
 ) -> void:
 	if returned_context == null:
 		push_warning(
-			"TacticalTest received no EncounterContext from the battle presentation."
+			"TacticalTest received no EncounterContext from battle."
 		)
 		return
 
 	if returned_context != active_encounter:
 		push_warning(
-			"TacticalTest received a battle result for an unexpected encounter."
+			"TacticalTest received a result for an unexpected encounter."
+		)
+		return
+
+	if selected_enemy_marker == null:
+		push_warning(
+			"TacticalTest lost the selected enemy marker during battle."
 		)
 		return
 
@@ -211,26 +259,26 @@ func on_game_presentation_finished(
 		and not returned_context.enemy_squad.is_alive()
 	)
 
-	active_encounter = null
-	encounter_state = EncounterState.EXPLORATION
-
-	player_marker.set_input_enabled(true)
-
 	if enemy_was_defeated:
-		enemy_marker.set_defeated()
+		selected_enemy_marker.set_defeated()
 
 		print(
-			"%s was defeated and is no longer available for encounters."
-			% enemy_marker.squad.display_name
+			"%s was defeated and remains individually removed from combat."
+			% selected_enemy_marker.squad.display_name
 		)
 	else:
-		enemy_marker.set_alert(false)
+		selected_enemy_marker.set_alert(true)
 
 	player_marker.refresh_visual()
-	enemy_marker.refresh_visual()
+	selected_enemy_marker.refresh_visual()
 
-	print("Battle presentation closed. Exploration resumed.")
+	active_encounter = null
+	selected_enemy_marker = null
+	encounter_state = EncounterState.EXPLORATION
 
+	turn_controller.resume_after_player_action()
+
+	print("Battle presentation closed. Tactical alert resumed.")
 
 func _draw() -> void:
 	# Temporary background: this will later be a prerendered tactical map.
