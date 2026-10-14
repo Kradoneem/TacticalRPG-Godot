@@ -11,57 +11,62 @@ const CombatResolverData = preload(
 	"res://scripts/domain/combat_resolver.gd"
 )
 
-const DEFAULT_MAXIMUM_PROTAGONIST_TURNS: int = 2
-
 enum Phase {
 	START_ABILITY,
+	ROUND,
+	FINISHING_ABILITY,
+	RESOLVED
+}
+
+enum ActionStep {
+	NONE,
 	PROTAGONIST_COMMAND,
 	TARGET_SELECTION,
 	MAIN_SQUAD_AUTOMATIC,
-	ENEMY_SQUAD_AUTOMATIC,
-	END_ABILITY,
-	FINISHED
+	ENEMY_SQUAD_AUTOMATIC
 }
 
 var encounter_context: EncounterContext
 var phase: Phase = Phase.START_ABILITY
+var action_step: ActionStep = ActionStep.NONE
 
-var protagonist_turns_completed: int = 0
-var maximum_protagonist_turns: int
+var current_round: int = 0
+var maximum_rounds: int = 2
 
 var _latest_log: Array[String] = []
 var _selected_command_id: StringName = &""
 var _main_squad_member_index: int = 0
 var _enemy_squad_member_index: int = 0
 
-func _init(
-	new_encounter_context: EncounterContext,
-	new_maximum_protagonist_turns: int = DEFAULT_MAXIMUM_PROTAGONIST_TURNS
-) -> void:
+
+func _init(new_encounter_context: EncounterContext) -> void:
 	encounter_context = new_encounter_context
-	maximum_protagonist_turns = maxi(1, new_maximum_protagonist_turns)
+
+	if encounter_context != null:
+		maximum_rounds = maxi(1, encounter_context.maximum_rounds)
 
 
 func begin_battle() -> void:
 	_clear_log()
+	current_round = 0
+	_selected_command_id = &""
+	_main_squad_member_index = 0
+	_enemy_squad_member_index = 0
+	action_step = ActionStep.NONE
 
 	if not is_valid():
 		_add_log("Battle could not start: invalid encounter context.")
-		phase = Phase.FINISHED
+		phase = Phase.RESOLVED
 		return
 
 	phase = Phase.START_ABILITY
-
-	## Equipable start abilities are intentionally not implemented yet.
-	## The state already exists, so adding them later does not alter battle flow.
 	_add_log("Battle begins.")
+
+	## Equipment and loadouts do not exist yet. This explicit lifecycle phase
+	## safely skips until an equipped start ability can be resolved here.
 	_add_log("No start ability is equipped.")
 
-	phase = Phase.PROTAGONIST_COMMAND
-	_add_log(
-		"Protagonist turn %d of %d: choose a command."
-		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
-	)
+	_begin_next_round()
 
 
 func is_valid() -> bool:
@@ -105,6 +110,8 @@ func get_primary_enemy_target() -> Unit:
 
 
 func is_player_defeated() -> bool:
+	## Current prototype enemies target the protagonist only.
+	## Revisit this when all party members can be valid enemy targets.
 	var protagonist := get_protagonist()
 
 	return protagonist == null or not protagonist.is_alive()
@@ -117,22 +124,26 @@ func is_enemy_defeated() -> bool:
 
 
 func is_finished() -> bool:
-	return phase == Phase.FINISHED
+	return phase == Phase.RESOLVED
 
 
 func can_accept_protagonist_command() -> bool:
 	return (
-		phase == Phase.PROTAGONIST_COMMAND
+		phase == Phase.ROUND
+		and action_step == ActionStep.PROTAGONIST_COMMAND
 		and not is_player_defeated()
 		and not is_enemy_defeated()
 	)
 
+
 func is_target_selection_active() -> bool:
 	return (
-		phase == Phase.TARGET_SELECTION
+		phase == Phase.ROUND
+		and action_step == ActionStep.TARGET_SELECTION
 		and not _selected_command_id.is_empty()
 	)
-	
+
+
 func get_selected_command_text() -> String:
 	match _selected_command_id:
 		&"basic_attack":
@@ -143,6 +154,7 @@ func get_selected_command_text() -> String:
 
 		_:
 			return "Unknown command"
+
 
 func get_targetable_enemy_units() -> Array[Unit]:
 	var targets: Array[Unit] = []
@@ -172,30 +184,24 @@ func get_phase_text() -> String:
 		Phase.START_ABILITY:
 			return "Start ability"
 
-		Phase.PROTAGONIST_COMMAND:
-			return "Protagonist command"
+		Phase.ROUND:
+			return "Round %d of %d — %s" % [
+				current_round,
+				maximum_rounds,
+				_get_action_step_text()
+			]
 
-		Phase.TARGET_SELECTION:
-			return "Target selection"
+		Phase.FINISHING_ABILITY:
+			return "Finishing ability"
 
-		Phase.MAIN_SQUAD_AUTOMATIC:
-			return "Main Squad automatic actions"
-
-		Phase.ENEMY_SQUAD_AUTOMATIC:
-			return "Enemy Squad automatic actions"
-
-		Phase.END_ABILITY:
-			return "End ability"
-
-		Phase.FINISHED:
-			return "Battle finished"
+		Phase.RESOLVED:
+			return "Battle resolved"
 
 		_:
 			return "Unknown phase"
 
-func get_latest_log_text(
-	maximum_lines: int = -1
-) -> String:
+
+func get_latest_log_text(maximum_lines: int = -1) -> String:
 	var lines_to_show: Array[String] = []
 
 	if maximum_lines > 0 and _latest_log.size() > maximum_lines:
@@ -207,6 +213,7 @@ func get_latest_log_text(
 		lines_to_show.append_array(_latest_log)
 
 	return "\n".join(lines_to_show)
+
 
 func begin_enemy_target_selection(command_id: StringName) -> void:
 	_clear_log()
@@ -220,26 +227,28 @@ func begin_enemy_target_selection(command_id: StringName) -> void:
 		return
 
 	if get_targetable_enemy_units().is_empty():
-		_finish_battle()
+		_finish_if_required()
 		return
 
 	_selected_command_id = command_id
-	phase = Phase.TARGET_SELECTION
+	action_step = ActionStep.TARGET_SELECTION
 
 	_add_log(
 		"Choose a target for %s."
 		% get_selected_command_text()
 	)
-	
+
+
 func cancel_target_selection() -> void:
 	if not is_target_selection_active():
 		return
 
 	_selected_command_id = &""
-	phase = Phase.PROTAGONIST_COMMAND
+	action_step = ActionStep.PROTAGONIST_COMMAND
 
 	_clear_log()
 	_add_log("Target selection cancelled. Choose a command.")
+
 
 func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 	if not is_target_selection_active():
@@ -251,7 +260,7 @@ func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 
 	if protagonist == null or enemy_target == null:
 		_selected_command_id = &""
-		phase = Phase.PROTAGONIST_COMMAND
+		action_step = ActionStep.PROTAGONIST_COMMAND
 
 		_clear_log()
 		_add_log("That target is no longer available.")
@@ -269,23 +278,132 @@ func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 
 	if resolved_action == null:
 		_selected_command_id = &""
-		phase = Phase.PROTAGONIST_COMMAND
+		action_step = ActionStep.PROTAGONIST_COMMAND
 		_add_log("Command was not resolved. Choose another command.")
 		return null
 
 	_selected_command_id = &""
-	protagonist_turns_completed += 1
 
 	if _finish_if_required():
 		return resolved_action
 
-	## BattleScene now gets time to show this action and its HP change.
 	_main_squad_member_index = 0
 	_enemy_squad_member_index = 0
-
-	phase = Phase.MAIN_SQUAD_AUTOMATIC
+	action_step = ActionStep.MAIN_SQUAD_AUTOMATIC
 
 	return resolved_action
+
+
+func resolve_next_automatic_action() -> BattleAction:
+	if action_step == ActionStep.MAIN_SQUAD_AUTOMATIC:
+		var main_squad_action := (
+			_resolve_next_main_squad_automatic_action()
+		)
+
+		if main_squad_action != null:
+			_finish_if_required()
+			return main_squad_action
+
+		if _finish_if_required():
+			return null
+
+		action_step = ActionStep.ENEMY_SQUAD_AUTOMATIC
+		_enemy_squad_member_index = 0
+
+		return resolve_next_automatic_action()
+
+	if action_step == ActionStep.ENEMY_SQUAD_AUTOMATIC:
+		var enemy_squad_action := (
+			_resolve_next_enemy_squad_automatic_action()
+		)
+
+		if enemy_squad_action != null:
+			_finish_if_required()
+			return enemy_squad_action
+
+		if _finish_if_required():
+			return null
+
+		_complete_current_round()
+		return null
+
+	return null
+
+
+func _begin_next_round() -> void:
+	current_round += 1
+	phase = Phase.ROUND
+	action_step = ActionStep.PROTAGONIST_COMMAND
+
+	_add_log(
+		"Round %d of %d: choose a protagonist command."
+		% [current_round, maximum_rounds]
+	)
+
+
+func _complete_current_round() -> void:
+	if current_round >= maximum_rounds:
+		_begin_finishing_ability_phase()
+		return
+
+	_begin_next_round()
+
+
+func _begin_finishing_ability_phase() -> void:
+	phase = Phase.FINISHING_ABILITY
+	action_step = ActionStep.NONE
+
+	## Equipment and loadouts do not exist yet. This explicit lifecycle phase
+	## safely skips until an equipped finishing ability can be resolved here.
+	_add_log("No finishing ability is equipped.")
+
+	phase = Phase.RESOLVED
+	_add_log(
+		"Battle window ended after %d complete round(s)."
+		% current_round
+	)
+
+
+func _finish_if_required() -> bool:
+	if is_finished():
+		return true
+
+	if is_enemy_defeated():
+		_resolve_early("Enemy Squad was defeated.")
+		return true
+
+	if is_player_defeated():
+		_resolve_early("The protagonist was defeated.")
+		return true
+
+	return false
+
+
+func _resolve_early(reason: String) -> void:
+	_selected_command_id = &""
+	action_step = ActionStep.NONE
+	phase = Phase.RESOLVED
+
+	_add_log(reason)
+
+
+func _get_action_step_text() -> String:
+	match action_step:
+		ActionStep.PROTAGONIST_COMMAND:
+			return "Protagonist command"
+
+		ActionStep.TARGET_SELECTION:
+			return "Target selection"
+
+		ActionStep.MAIN_SQUAD_AUTOMATIC:
+			return "Main Squad automatic actions"
+
+		ActionStep.ENEMY_SQUAD_AUTOMATIC:
+			return "Enemy Squad automatic actions"
+
+		_:
+			return "Preparing round"
+
 
 func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 	for unit: Unit in get_targetable_enemy_units():
@@ -293,6 +411,7 @@ func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 			return unit
 
 	return null
+
 
 func _resolve_protagonist_command(
 	protagonist: Unit,
@@ -335,6 +454,7 @@ func _resolve_protagonist_command(
 		_:
 			_add_log("Unknown command: %s." % command_id)
 			return null
+
 
 func _resolve_damage_skill(
 	attacker: Unit,
@@ -388,40 +508,6 @@ func _resolve_damage_skill(
 	_add_log(action.message)
 	return action
 
-func resolve_next_automatic_action() -> BattleAction:
-	if phase == Phase.MAIN_SQUAD_AUTOMATIC:
-		var main_squad_action := (
-			_resolve_next_main_squad_automatic_action()
-		)
-
-		if main_squad_action != null:
-			_finish_if_required()
-			return main_squad_action
-
-		if _finish_if_required():
-			return null
-
-		phase = Phase.ENEMY_SQUAD_AUTOMATIC
-		_enemy_squad_member_index = 0
-
-		return resolve_next_automatic_action()
-
-	if phase == Phase.ENEMY_SQUAD_AUTOMATIC:
-		var enemy_squad_action := (
-			_resolve_next_enemy_squad_automatic_action()
-		)
-
-		if enemy_squad_action != null:
-			_finish_if_required()
-			return enemy_squad_action
-
-		if _finish_if_required():
-			return null
-
-		_finish_automatic_round()
-		return null
-
-	return null
 
 func _resolve_next_main_squad_automatic_action() -> BattleAction:
 	var player_squad := get_player_squad()
@@ -431,7 +517,10 @@ func _resolve_next_main_squad_automatic_action() -> BattleAction:
 		return null
 
 	while _main_squad_member_index < player_squad.members.size():
-		var unit: Unit = player_squad.members[_main_squad_member_index]
+		var unit: Unit = player_squad.members[
+			_main_squad_member_index
+		]
+
 		_main_squad_member_index += 1
 
 		if unit == null or not unit.is_alive() or unit == protagonist:
@@ -446,6 +535,7 @@ func _resolve_next_main_squad_automatic_action() -> BattleAction:
 
 	return null
 
+
 func _resolve_next_enemy_squad_automatic_action() -> BattleAction:
 	var enemy_squad := get_enemy_squad()
 	var protagonist := get_protagonist()
@@ -457,6 +547,7 @@ func _resolve_next_enemy_squad_automatic_action() -> BattleAction:
 		var enemy_unit: Unit = enemy_squad.members[
 			_enemy_squad_member_index
 		]
+
 		_enemy_squad_member_index += 1
 
 		if enemy_unit == null or not enemy_unit.is_alive():
@@ -473,6 +564,7 @@ func _resolve_next_enemy_squad_automatic_action() -> BattleAction:
 		)
 
 	return null
+
 
 func _resolve_automatic_unit_action(
 	acting_unit: Unit,
@@ -532,45 +624,6 @@ func _resolve_automatic_unit_action(
 
 	_add_log(attack_action.message)
 	return attack_action
-
-func _finish_automatic_round() -> void:
-	if protagonist_turns_completed >= maximum_protagonist_turns:
-		_finish_battle()
-		return
-
-	phase = Phase.PROTAGONIST_COMMAND
-	_add_log(
-		"Protagonist turn %d of %d: choose a command."
-		% [protagonist_turns_completed + 1, maximum_protagonist_turns]
-	)
-
-func _finish_if_required() -> bool:
-	if is_enemy_defeated():
-		_add_log("Enemy Squad was defeated.")
-		phase = Phase.FINISHED
-		return true
-
-	if is_player_defeated():
-		_add_log("The protagonist was defeated.")
-		phase = Phase.FINISHED
-		return true
-
-	return false
-
-
-func _finish_battle() -> void:
-	phase = Phase.END_ABILITY
-
-	## Equipable end abilities will be added later.
-	_add_log("No end ability is equipped.")
-
-	phase = Phase.FINISHED
-
-	if not is_enemy_defeated() and not is_player_defeated():
-		_add_log(
-			"Battle window ended after %d protagonist turns."
-			% protagonist_turns_completed
-		)
 
 
 func _clear_log() -> void:
