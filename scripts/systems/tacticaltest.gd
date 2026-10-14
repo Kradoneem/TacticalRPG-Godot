@@ -223,7 +223,8 @@ func start_encounter(
 		player_marker.squad,
 		enemy_marker.squad,
 		initiator,
-		encounter_strategy
+		encounter_strategy,
+		3
 	)
 
 	player_marker.set_input_enabled(false)
@@ -260,11 +261,25 @@ func on_game_presentation_finished(
 		)
 		return
 
+	var enemy_was_defeated := (
+		returned_context.enemy_squad != null
+		and not returned_context.enemy_squad.is_alive()
+	)
+
 	active_encounter = null
 	encounter_state = EncounterState.EXPLORATION
 
 	player_marker.set_input_enabled(true)
-	enemy_marker.set_alert(false)
+
+	if enemy_was_defeated:
+		enemy_marker.set_defeated()
+
+		print(
+			"%s was defeated and is no longer available for encounters."
+			% enemy_marker.squad.display_name
+		)
+	else:
+		enemy_marker.set_alert(false)
 
 	player_marker.refresh_visual()
 	enemy_marker.refresh_visual()
