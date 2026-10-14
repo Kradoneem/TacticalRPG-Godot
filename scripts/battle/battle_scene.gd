@@ -20,6 +20,7 @@ var _return_button: Button
 var _attack_button: Button
 var _focused_strike_button: Button
 var _target_buttons: Array[Button] = []
+var _selected_target_index: int = 0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -415,6 +416,7 @@ func _create_formation_slot(
 				battle_session.get_selected_command_text()
 			]
 		)
+		target_button.set_meta("target_unit_id", unit.unit_id)
 
 		target_button.add_theme_stylebox_override(
 			"normal",
@@ -547,8 +549,37 @@ func _focus_first_target() -> void:
 	if _target_buttons.is_empty():
 		return
 
-	_target_buttons[0].grab_focus()
-	
+	_selected_target_index = 0
+	_target_buttons[_selected_target_index].grab_focus()
+
+
+func _move_target_focus(direction: int) -> void:
+	if _target_buttons.is_empty():
+		return
+
+	_selected_target_index = posmod(
+		_selected_target_index + direction,
+		_target_buttons.size()
+	)
+
+	_target_buttons[_selected_target_index].grab_focus()
+
+func _confirm_focused_target() -> void:
+	if _target_buttons.is_empty():
+		return
+
+	var target_button := _target_buttons[_selected_target_index]
+
+	if not target_button.has_meta("target_unit_id"):
+		push_warning("Target button has no target_unit_id metadata.")
+		return
+
+	var target_unit_id := String(
+		target_button.get_meta("target_unit_id")
+	)
+
+	_on_enemy_target_selected(target_unit_id)
+
 func _configure_target_navigation() -> void:
 	if _target_buttons.is_empty():
 		return
@@ -585,20 +616,35 @@ func _configure_target_navigation() -> void:
 			current_button.get_path_to(next_button)
 		)
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if (
-		event is InputEventKey
-		and event.is_pressed()
-		and not event.is_echo()
-		and event.keycode == KEY_ESCAPE
-		and battle_session != null
-		and battle_session.is_target_selection_active()
+		not event is InputEventKey
+		or not event.is_pressed()
+		or event.is_echo()
+		or battle_session == null
+		or not battle_session.is_target_selection_active()
 	):
-		battle_session.cancel_target_selection()
-		_refresh_presentation()
-		get_viewport().set_input_as_handled()
 		return
 
+	match event.keycode:
+		KEY_UP, KEY_LEFT:
+			_move_target_focus(-1)
+			get_viewport().set_input_as_handled()
+
+		KEY_DOWN, KEY_RIGHT:
+			_move_target_focus(1)
+			get_viewport().set_input_as_handled()
+
+		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
+			_confirm_focused_target()
+			get_viewport().set_input_as_handled()
+
+		KEY_ESCAPE:
+			battle_session.cancel_target_selection()
+			_refresh_presentation()
+			get_viewport().set_input_as_handled()
+
+func _unhandled_input(event: InputEvent) -> void:
 	## Tactical movement must not leak through to the hidden tactical scene.
 	if event.is_action_pressed("move_up"):
 		get_viewport().set_input_as_handled()
