@@ -6,6 +6,8 @@ extends Node2D
 ## One tactical token represents one entire Squad, not an individual Unit.
 
 signal cell_changed(previous_cell: Vector2i, new_cell: Vector2i)
+@warning_ignore("unused_signal")
+signal movement_requested(direction: Vector2i)
 
 var squad: Squad
 var cell: Vector2i
@@ -53,23 +55,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event.is_action_pressed("move_up"):
-		move_by(Vector2i.UP)
+		movement_requested.emit(Vector2i.UP)
 	elif event.is_action_pressed("move_down"):
-		move_by(Vector2i.DOWN)
+		movement_requested.emit(Vector2i.DOWN)
 	elif event.is_action_pressed("move_left"):
-		move_by(Vector2i.LEFT)
+		movement_requested.emit(Vector2i.LEFT)
 	elif event.is_action_pressed("move_right"):
-		move_by(Vector2i.RIGHT)
+		movement_requested.emit(Vector2i.RIGHT)
 
-
-func move_by(direction: Vector2i) -> void:
+func move_by(direction: Vector2i) -> bool:
 	if _grid == null:
-		return
+		return false
 
 	var target_cell: Vector2i = cell + direction
 
 	if not _grid.is_walkable(target_cell):
-		return
+		return false
 
 	var previous_cell: Vector2i = cell
 	cell = target_cell
@@ -77,6 +78,7 @@ func move_by(direction: Vector2i) -> void:
 
 	cell_changed.emit(previous_cell, cell)
 
+	return true
 
 func get_cell_center(target_cell: Vector2i) -> Vector2:
 	var cell_offset: Vector2 = Vector2(target_cell.x, target_cell.y) * _cell_size

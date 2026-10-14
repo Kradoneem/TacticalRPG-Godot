@@ -20,6 +20,10 @@ const PLAYER_ENGAGE_RANGE: int = 3
 
 const BATTLE_SCENE_PATH: String = "res://scenes/battle/battle_scene.tscn"
 
+const TacticalTurnControllerData = preload(
+	"res://scripts/systems/tactical_turn_controller.gd"
+)
+
 enum EncounterState {
 	EXPLORATION,
 	STRATEGY_SELECTION
@@ -34,6 +38,7 @@ var test_enemy_squad: Squad
 var strategy_prompt: StrategyPrompt
 var active_encounter: EncounterContext
 var encounter_state: EncounterState = EncounterState.EXPLORATION
+var turn_controller
 
 func _ready() -> void:
 	tactical_grid = TacticalGrid.new(GRID_SIZE)
@@ -70,7 +75,7 @@ func _ready() -> void:
 		12
 	)
 
-	corrupted_acolyte.learn_skill(&"patch_flesh")
+	corrupted_acolyte.learn_ability(&"patch_flesh")
 
 	test_enemy_squad.add_member(sewer_beast)
 	test_enemy_squad.add_member(corrupted_acolyte)
@@ -92,8 +97,8 @@ func _ready() -> void:
 	enemy_marker.configure(
 		GRID_ORIGIN,
 		CELL_SIZE,
-		Vector2i(10, 1),
-		2,
+		Vector2i(12, 5),
+		10,
 		test_enemy_squad
 	)
 
@@ -101,11 +106,18 @@ func _ready() -> void:
 	add_child(strategy_prompt)
 	strategy_prompt.strategy_selected.connect(_on_strategy_selected)
 
-	player_marker.cell_changed.connect(_on_player_cell_changed)
-	enemy_marker.player_detected.connect(_on_enemy_detected)
-	enemy_marker.player_lost.connect(_on_enemy_lost_player)
+	var test_enemy_markers: Array[TacticalEnemy] = [
+		enemy_marker
+	]
 
-	enemy_marker.check_detection(player_marker.cell)
+	turn_controller = TacticalTurnControllerData.new()
+	add_child(turn_controller)
+
+	turn_controller.configure(
+		player_marker,
+		test_enemy_markers
+	)
+
 	queue_redraw()
 
 func configure_test_map() -> void:
@@ -125,62 +137,26 @@ func configure_test_map() -> void:
 			false
 		)
 
-
-func _on_player_cell_changed(
-	_previous_cell: Vector2i,
-	new_cell: Vector2i
-) -> void:
-	enemy_marker.check_detection(new_cell)
-
-
 func _unhandled_input(event: InputEvent) -> void:
-	if encounter_state != EncounterState.EXPLORATION:
+	if turn_controller == null:
 		return
 
+	if not turn_controller.is_free_exploration():
+		return
+
+	## Directe engagement is verwijderd uit de exploration-flow.
+	## In een volgende milestone opent adjacency een tactical action menu.
 	if event.is_action_pressed("engage"):
-		try_player_initiated_encounter()
-
-
-func try_player_initiated_encounter() -> void:
-	if enemy_marker.is_defeated():
-		return
-
-	var distance_to_enemy: int = enemy_marker.get_manhattan_distance_to(
-		player_marker.cell
-	)
-
-	if distance_to_enemy > PLAYER_ENGAGE_RANGE:
 		print(
-			"Enemy squad is too far away to engage. "
-			+ "Move within %d cells."
-			% PLAYER_ENGAGE_RANGE
+			"Direct engagement is unavailable. "
+			+ "Move adjacent during alert tactical state."
 		)
-		return
-
-	encounter_state = EncounterState.STRATEGY_SELECTION
-	player_marker.set_input_enabled(false)
-	strategy_prompt.open_for_squad(player_marker.squad)
 
 
 func _on_strategy_selected(strategy_id: StringName) -> void:
 	start_encounter(
 		EncounterContext.Initiator.PLAYER,
 		strategy_id
-	)
-
-
-func _on_enemy_detected(enemy_cell: Vector2i) -> void:
-	if encounter_state != EncounterState.EXPLORATION:
-		return
-
-	start_encounter(
-		EncounterContext.Initiator.ENEMY,
-		player_marker.squad.default_strategy
-	)
-
-	print(
-		"%s triggered combat at %s."
-		% [enemy_marker.squad.display_name, enemy_cell]
 	)
 
 
@@ -254,10 +230,6 @@ func on_game_presentation_finished(
 	enemy_marker.refresh_visual()
 
 	print("Battle presentation closed. Exploration resumed.")
-
-
-func _on_enemy_lost_player() -> void:
-	print("The player left the enemy detection range.")
 
 
 func _draw() -> void:
