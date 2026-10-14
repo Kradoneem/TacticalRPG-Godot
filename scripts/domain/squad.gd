@@ -156,6 +156,41 @@ func get_average_speed() -> float:
 
 	return float(total_speed) / float(living_members.size())
 
+func get_slowest_living_member_speed() -> int:
+	var living_members: Array[Unit] = get_living_members()
+
+	if living_members.is_empty():
+		return 0
+
+	var slowest_speed: int = living_members[0].speed
+
+	for unit: Unit in living_members:
+		slowest_speed = mini(slowest_speed, unit.speed)
+
+	return slowest_speed
+
+
+func get_alert_movement_budget() -> int:
+	var living_member_count: int = get_living_members().size()
+	var formation_lightness_bonus: int = MAX_MEMBERS - living_member_count
+	var base_movement: int = floori(
+		float(get_slowest_living_member_speed()) / 3.0
+	)
+
+	return clampi(
+		base_movement + formation_lightness_bonus,
+		2,
+		5
+	)
+
+
+func get_alert_initiative() -> int:
+	var living_member_count: int = get_living_members().size()
+	var formation_lightness_bonus: int = (
+		MAX_MEMBERS - living_member_count
+	) * 2
+
+	return roundi(get_average_speed()) + formation_lightness_bonus
 
 func get_summary() -> String:
 	var member_names: Array[String] = []
