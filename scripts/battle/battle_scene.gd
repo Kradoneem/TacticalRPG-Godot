@@ -22,6 +22,8 @@ var _attack_button: Button
 var _focused_strike_button: Button
 var _target_buttons: Array[Button] = []
 var _selected_target_index: int = 0
+var _action_feedback_label: Label
+var _action_feedback_serial: int = 0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -29,6 +31,7 @@ func _ready() -> void:
 	command_selected.connect(_on_command_selected)
 
 	_build_interface()
+	_build_action_feedback()
 
 func configure(context: EncounterContext) -> void:
 	encounter_context = context
@@ -110,13 +113,87 @@ func _build_interface() -> void:
 	var hint_label := Label.new()
 	hint_label.text = (
 		"Temporary transition test — "
-		+ "the battle scene does not resolve combat yet."
+		+ "Actions resolve one at a time."
 	)
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint_label.modulate = Color("#aab8c4")
 	page.add_child(hint_label)
 
 	_refresh_presentation()
+
+func _build_action_feedback() -> void:
+	_action_feedback_label = Label.new()
+	_action_feedback_label.set_anchors_preset(Control.PRESET_CENTER)
+
+	_action_feedback_label.offset_left = -220.0
+	_action_feedback_label.offset_top = -70.0
+	_action_feedback_label.offset_right = 220.0
+	_action_feedback_label.offset_bottom = 70.0
+
+	_action_feedback_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+	_action_feedback_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+	_action_feedback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_action_feedback_label.add_theme_font_size_override("font_size", 34)
+	_action_feedback_label.add_theme_color_override(
+		"font_outline_color",
+		Color("#10171d")
+	)
+	_action_feedback_label.add_theme_constant_override("outline_size", 8)
+
+	_action_feedback_label.hide()
+	add_child(_action_feedback_label)
+	
+func _show_action_feedback(action: BattleAction) -> void:
+	if (
+		action == null
+		or not action.is_valid()
+		or _action_feedback_label == null
+	):
+		return
+
+	_action_feedback_serial += 1
+	var feedback_serial := _action_feedback_serial
+
+	var action_name := "Attack"
+	var amount_prefix := "-"
+
+	if action.skill != null:
+		action_name = action.skill.display_name
+
+	if action.action_type == BattleAction.Type.HEALING:
+		amount_prefix = "+"
+		_action_feedback_label.modulate = Color("#8ff0a4")
+	elif action.action_type == BattleAction.Type.SKILL_DAMAGE:
+		_action_feedback_label.modulate = Color("#ffe183")
+	else:
+		_action_feedback_label.modulate = Color("#ff9f9f")
+
+	_action_feedback_label.text = "%s\n%s%d" % [
+		action_name,
+		amount_prefix,
+		action.applied_amount
+	]
+
+	_action_feedback_label.show()
+	_hide_action_feedback_after_delay(feedback_serial)
+	
+func _hide_action_feedback_after_delay(
+	feedback_serial: int
+) -> void:
+	await get_tree().create_timer(0.65).timeout
+
+	if (
+		_action_feedback_label == null
+		or feedback_serial != _action_feedback_serial
+	):
+		return
+
+	_action_feedback_label.hide()
 
 func _build_command_hud(parent: VBoxContainer) -> void:
 	var hud_panel := PanelContainer.new()
@@ -536,6 +613,11 @@ func _on_command_selected(command_id: StringName) -> void:
 	if battle_session == null:
 		return
 
+	_action_feedback_serial += 1
+
+	if _action_feedback_label != null:
+		_action_feedback_label.hide()
+
 	battle_session.begin_enemy_target_selection(command_id)
 	_refresh_presentation()
 
@@ -552,6 +634,7 @@ func _on_enemy_target_selected(target_unit_id: String) -> void:
 	if resolved_action == null or not resolved_action.is_valid():
 		return
 
+	_show_action_feedback(resolved_action)
 	_continue_after_protagonist_action()
 
 func _continue_after_protagonist_action() -> void:
@@ -571,6 +654,8 @@ func _play_automatic_action_sequence() -> void:
 
 		if resolved_action == null:
 			return
+
+		_show_action_feedback(resolved_action)
 
 		await get_tree().create_timer(
 			PROTAGONIST_ACTION_DISPLAY_SECONDS
