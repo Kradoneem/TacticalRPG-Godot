@@ -32,6 +32,10 @@ const TacticalCursorData = preload(
 	"res://scripts/systems/tactical_cursor.gd"
 )
 
+const PartyMenuData = preload(
+	"res://scripts/ui/party_menu.gd"
+)
+
 enum EncounterState {
 	EXPLORATION,
 	TACTICAL_ACTION_SELECTION,
@@ -52,6 +56,7 @@ var turn_controller
 var tactical_action_prompt: TacticalActionPrompt
 var selected_enemy_marker: TacticalEnemy
 var tactical_cursor: TacticalCursor
+var party_menu: PartyMenu
 
 func _ready() -> void:
 	tactical_grid = TacticalGrid.new(GRID_SIZE)
@@ -170,6 +175,9 @@ func _ready() -> void:
 	turn_controller.adjacent_enemies_available.connect(
 		_on_adjacent_enemies_available
 	)
+
+	party_menu = PartyMenuData.new()
+	add_child(party_menu)
 
 	queue_redraw()
 
@@ -298,8 +306,18 @@ func configure_test_map() -> void:
 
 	tactical_grid.set_blocked(Vector2i(13, 10), false)
 
-func _unhandled_input(_event: InputEvent) -> void:
-	pass
+func _unhandled_input(event: InputEvent) -> void:
+	if party_menu == null or party_menu.is_open():
+		return
+
+	if not event.is_action_pressed("ui_cancel"):
+		return
+
+	if turn_controller == null or not turn_controller.is_free_exploration():
+		return
+
+	party_menu.open_for_party(GameState.party)
+	get_viewport().set_input_as_handled()
 
 func _on_adjacent_enemies_available(
 	adjacent_enemies: Array[TacticalEnemy]
