@@ -422,15 +422,23 @@ Geen results screen na elke korte battle transition, tenzij de gebruiker dit lat
 - Side-view `battle_scene` bestaat en keert terug naar dezelfde tactical context.
 - Battle unit cards behouden hun nodes en HP-bars tweenen soepel tussen values.
 - Expanded ability model en unified learned skill/spell ownership zijn op GitHub bevestigd in commits `a6a9656` en `39dca3c`.
+- BattleSession ondersteunt een configureerbare maximum_rounds snapshot via EncounterContext.
+- De battle lifecycle werkt als:
+  START_ABILITY → herhaalde volledige rondes → FINISHING_ABILITY → RESOLVED.
+- Start- en finishing-hooks skippen veilig zolang loadouts ontbreken.
+- De battle transition eindigt na maximum_rounds wanneer beide squads nog leven.
+- Tactical alert state ondersteunt vrije exploration, enemy notice, globale turn order,
+  cursor-gebaseerde player movement commitment, STATIC en PATROL.
+- Patrols bewegen één waypoint-stap na een geldige exploration-beweging en op hun
+  eigen alert tactical beurt.
+- Enemy squads blijven zelfstandige tokens; alert propagates via een notice-chain.
+
 
 ### Nog niet bouwen of als af beschouwen
 
 - Party Menu in Godot.
 - Echte vrije exploration map als content slice.
-- Alert tactical turn controller.
 - Squad movement formula.
-- Patrol routes en tactical AI modes.
-- Two-round battle lifecycle met start/finishing ability hooks.
 - Items/equipment/loadout port.
 - Quest/dialogue/shop systems.
 - Map-clear rewards, XP en loot.
