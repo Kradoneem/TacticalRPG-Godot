@@ -316,7 +316,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if turn_controller == null or not turn_controller.is_free_exploration():
 		return
 
-	party_menu.open_for_party(GameState.party)
+	party_menu.open_for_squads(GameState.squads)
 	get_viewport().set_input_as_handled()
 
 func _on_adjacent_enemies_available(
