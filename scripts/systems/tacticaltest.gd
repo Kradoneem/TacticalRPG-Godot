@@ -9,9 +9,9 @@ const StrategyPromptData = preload(
 
 const VIEWPORT_SIZE: Vector2 = Vector2(1920.0, 1080.0)
 
-const GRID_ORIGIN: Vector2 = Vector2(168.0, 108.0)
-const GRID_SIZE: Vector2i = Vector2i(22, 12)
-const CELL_SIZE: float = 72.0
+const GRID_ORIGIN: Vector2 = Vector2(96.0, 36.0)
+const GRID_SIZE: Vector2i = Vector2i(40, 24)
+const CELL_SIZE: float = 42.0
 
 ## This is a strategic engagement radius, not weapon range.
 ## It represents noticing, approaching and committing before the
@@ -72,7 +72,7 @@ func _ready() -> void:
 		tactical_grid,
 		GRID_ORIGIN,
 		CELL_SIZE,
-		Vector2i(2, 1),
+		Vector2i(3, 2),
 		main_squad
 	)
 
@@ -91,18 +91,20 @@ func _ready() -> void:
 		tactical_grid,
 		GRID_ORIGIN,
 		CELL_SIZE,
-		Vector2i(18, 9),
+		Vector2i(33, 18),
 		10,
 		test_enemy_squad
 	)
 
 	enemy_marker.configure_patrol([
-		Vector2i(18, 9),
-		Vector2i(17, 9),
-		Vector2i(16, 9),
-		Vector2i(15, 9),
-		Vector2i(16, 9),
-		Vector2i(17, 9)
+		Vector2i(33, 18),
+		Vector2i(32, 18),
+		Vector2i(31, 18),
+		Vector2i(30, 18),
+		Vector2i(29, 18),
+		Vector2i(30, 18),
+		Vector2i(31, 18),
+		Vector2i(32, 18)
 	])
 
 	var canal_patrol := _create_enemy_marker(
@@ -113,19 +115,21 @@ func _ready() -> void:
 		7,
 		2,
 		6,
-		Vector2i(11, 9)
+		Vector2i(18, 20)
 	)
 
 	canal_patrol.configure_patrol([
-		Vector2i(11, 9),
-		Vector2i(10, 9),
-		Vector2i(9, 9),
-		Vector2i(8, 9),
-		Vector2i(9, 9),
-		Vector2i(10, 9)
+		Vector2i(18, 20),
+		Vector2i(17, 20),
+		Vector2i(16, 20),
+		Vector2i(15, 20),
+		Vector2i(14, 20),
+		Vector2i(15, 20),
+		Vector2i(16, 20),
+		Vector2i(17, 20)
 	])
 
-	var static_guard := _create_enemy_marker(
+	var sluice_guard := _create_enemy_marker(
 		"sluice_guard",
 		"Sluice Guard",
 		"Corrupted Guard",
@@ -133,13 +137,36 @@ func _ready() -> void:
 		12,
 		4,
 		4,
-		Vector2i(18, 2)
+		Vector2i(34, 4)
 	)
+
+	var western_vermin := _create_enemy_marker(
+		"western_vermin",
+		"Western Vermin",
+		"Drain Crawler",
+		26,
+		8,
+		2,
+		7,
+		Vector2i(8, 16)
+	)
+
+	western_vermin.configure_patrol([
+		Vector2i(8, 16),
+		Vector2i(7, 16),
+		Vector2i(6, 16),
+		Vector2i(5, 16),
+		Vector2i(4, 16),
+		Vector2i(5, 16),
+		Vector2i(6, 16),
+		Vector2i(7, 16)
+	])
 
 	enemy_markers = [
 		enemy_marker,
 		canal_patrol,
-		static_guard
+		sluice_guard,
+		western_vermin
 	]
 
 	strategy_prompt = StrategyPromptData.new()
@@ -267,44 +294,90 @@ func _create_enemy_squad(
 	return enemy_squad
 
 func configure_test_map() -> void:
-	# Central water channel: rows 5 and 6.
+	# The central canal divides the sewer into northern and southern sectors.
+	# It forces meaningful route decisions without changing movement rules.
 	for column in range(GRID_SIZE.x):
+		tactical_grid.set_blocked(Vector2i(column, 11))
+		tactical_grid.set_blocked(Vector2i(column, 12))
+
+	# West bridge: safest early crossing, but close to the Western Vermin patrol.
+	for bridge_column in range(5, 9):
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 11),
+			false
+		)
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 12),
+			false
+		)
+
+	# Central bridge: shortest route, deliberately exposed to the Canal Rats.
+	for bridge_column in range(18, 22):
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 11),
+			false
+		)
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 12),
+			false
+		)
+
+	# East bridge: route toward the Sluice Guard and the Sewer Pack.
+	for bridge_column in range(31, 35):
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 11),
+			false
+		)
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 12),
+			false
+		)
+
+	# Northern collapsed wall. The opening keeps the upper route connected,
+	# while creating a visible bottleneck before the Sluice Guard.
+	for column in range(12, 29):
 		tactical_grid.set_blocked(Vector2i(column, 5))
-		tactical_grid.set_blocked(Vector2i(column, 6))
 
-	# West bridge: early safe route into the southern half.
-	for bridge_column in range(4, 7):
+	for opening_column in range(19, 22):
 		tactical_grid.set_blocked(
-			Vector2i(bridge_column, 5),
-			false
-		)
-		tactical_grid.set_blocked(
-			Vector2i(bridge_column, 6),
+			Vector2i(opening_column, 5),
 			false
 		)
 
-	# East bridge: contested route near the static guard.
-	for bridge_column in range(15, 18):
+	# Southern rubble creates a detour around the Canal Rats' patrol lane.
+	for column in range(12, 26):
+		tactical_grid.set_blocked(Vector2i(column, 19))
+
+	for opening_column in range(16, 19):
 		tactical_grid.set_blocked(
-			Vector2i(bridge_column, 5),
+			Vector2i(opening_column, 19),
 			false
 		)
+
+	# Western drainage blockage: gives the first patrol a confined route
+	# and makes the west bridge a deliberate early commitment.
+	for row in range(15, 22):
+		tactical_grid.set_blocked(Vector2i(10, row))
+
+	for opening_row in range(17, 20):
 		tactical_grid.set_blocked(
-			Vector2i(bridge_column, 6),
+			Vector2i(10, opening_row),
 			false
 		)
 
-	# Northern sewer wall: creates a long route around the Sluice Guard.
-	for column in range(7, 14):
-		tactical_grid.set_blocked(Vector2i(column, 2))
+	# Eastern sewer wall separates the guard's upper approach from the
+	# lower enemy-pack route, except for one narrow passage.
+	for row in range(3, 10):
+		tactical_grid.set_blocked(Vector2i(29, row))
 
-	tactical_grid.set_blocked(Vector2i(10, 2), false)
+	tactical_grid.set_blocked(Vector2i(29, 7), false)
 
-	# Southern rubble: turns the Canal Rats patrol into a readable chokepoint.
-	for column in range(12, 16):
-		tactical_grid.set_blocked(Vector2i(column, 10))
+	# Small northern obstruction near the player start.
+	# It establishes a readable first route without trapping the squad.
+	for column in range(5, 10):
+		tactical_grid.set_blocked(Vector2i(column, 3))
 
-	tactical_grid.set_blocked(Vector2i(13, 10), false)
+	tactical_grid.set_blocked(Vector2i(7, 3), false)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if party_menu == null or party_menu.is_open():
@@ -453,9 +526,10 @@ func _draw() -> void:
 		Color("#304a4f")
 	)
 
+	# Central canal.
 	var canal_top_left := (
 		GRID_ORIGIN
-		+ Vector2(0.0, 5.0 * CELL_SIZE)
+		+ Vector2(0.0, 11.0 * CELL_SIZE)
 	)
 
 	draw_rect(
@@ -466,18 +540,29 @@ func _draw() -> void:
 		Color("#163b56")
 	)
 
+	# West bridge.
 	draw_rect(
 		Rect2(
-			GRID_ORIGIN + Vector2(4.0 * CELL_SIZE, 5.0 * CELL_SIZE),
-			Vector2(CELL_SIZE * 3.0, CELL_SIZE * 2.0)
+			GRID_ORIGIN + Vector2(5.0 * CELL_SIZE, 11.0 * CELL_SIZE),
+			Vector2(CELL_SIZE * 4.0, CELL_SIZE * 2.0)
 		),
 		Color("#796044")
 	)
 
+	# Central bridge.
 	draw_rect(
 		Rect2(
-			GRID_ORIGIN + Vector2(15.0 * CELL_SIZE, 5.0 * CELL_SIZE),
-			Vector2(CELL_SIZE * 3.0, CELL_SIZE * 2.0)
+			GRID_ORIGIN + Vector2(18.0 * CELL_SIZE, 11.0 * CELL_SIZE),
+			Vector2(CELL_SIZE * 4.0, CELL_SIZE * 2.0)
+		),
+		Color("#796044")
+	)
+
+	# East bridge.
+	draw_rect(
+		Rect2(
+			GRID_ORIGIN + Vector2(31.0 * CELL_SIZE, 11.0 * CELL_SIZE),
+			Vector2(CELL_SIZE * 4.0, CELL_SIZE * 2.0)
 		),
 		Color("#796044")
 	)
