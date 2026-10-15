@@ -475,7 +475,7 @@ func _refresh_presentation() -> void:
 	elif primary_enemy != null:
 		target_text = "Primary target: %s" % primary_enemy.display_name
 
-	_status_label.text = "%s  |  Strategy: %s\nPhase: %s\nCommander: %s  |  %s" % [
+	_status_label.text = "%s | Strategy: %s\nPhase: %s\nCommander: %s | %s" % [
 		battle_session.get_initiator_text(),
 		encounter_context.active_strategy,
 		battle_session.get_phase_text(),
@@ -488,7 +488,9 @@ func _refresh_presentation() -> void:
 	if not latest_log.is_empty():
 		_status_label.text += "\n\n" + latest_log
 
-	_attack_button.disabled = not battle_session.can_accept_protagonist_command()
+	_attack_button.disabled = (
+		not battle_session.can_accept_protagonist_command()
+	)
 
 	_focused_strike_button.disabled = (
 		protagonist == null
@@ -504,12 +506,6 @@ func _refresh_presentation() -> void:
 		_return_button.text = "Battle in progress"
 
 	_refresh_formation_cards()
-
-	if battle_session.is_target_selection_active():
-		_configure_target_navigation()
-		call_deferred("_focus_first_target")
-	elif battle_session.can_accept_protagonist_command():
-		call_deferred("_focus_first_available_command")
 
 	if battle_session.is_finished():
 		call_deferred("_focus_return_button")

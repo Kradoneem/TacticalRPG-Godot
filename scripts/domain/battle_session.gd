@@ -110,12 +110,9 @@ func get_primary_enemy_target() -> Unit:
 
 
 func is_player_defeated() -> bool:
-	## Current prototype enemies target the protagonist only.
-	## Revisit this when all party members can be valid enemy targets.
-	var protagonist := get_protagonist()
+	var player_squad := get_player_squad()
 
-	return protagonist == null or not protagonist.is_alive()
-
+	return player_squad == null or not player_squad.is_alive()
 
 func is_enemy_defeated() -> bool:
 	var enemy_squad := get_enemy_squad()
