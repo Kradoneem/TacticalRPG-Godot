@@ -28,6 +28,10 @@ const TacticalActionPromptData = preload(
 	"res://scripts/ui/tactical_action_prompt.gd"
 )
 
+const TacticalCursorData = preload(
+	"res://scripts/systems/tactical_cursor.gd"
+)
+
 enum EncounterState {
 	EXPLORATION,
 	TACTICAL_ACTION_SELECTION,
@@ -47,6 +51,7 @@ var encounter_state: EncounterState = EncounterState.EXPLORATION
 var turn_controller
 var tactical_action_prompt: TacticalActionPrompt
 var selected_enemy_marker: TacticalEnemy
+var tactical_cursor: TacticalCursor
 
 func _ready() -> void:
 	tactical_grid = TacticalGrid.new(GRID_SIZE)
@@ -145,12 +150,21 @@ func _ready() -> void:
 		_on_tactical_action_cancelled
 	)
 
+	tactical_cursor = TacticalCursorData.new()
+	add_child(tactical_cursor)
+
+	tactical_cursor.configure(
+		GRID_ORIGIN,
+		CELL_SIZE
+	)
+
 	turn_controller = TacticalTurnControllerData.new()
 	add_child(turn_controller)
 
 	turn_controller.configure(
 		player_marker,
-		enemy_markers
+		enemy_markers,
+		tactical_cursor
 	)
 
 	turn_controller.adjacent_enemies_available.connect(

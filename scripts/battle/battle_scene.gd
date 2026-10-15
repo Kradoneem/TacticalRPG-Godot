@@ -511,6 +511,19 @@ func _refresh_presentation() -> void:
 	elif battle_session.can_accept_protagonist_command():
 		call_deferred("_focus_first_available_command")
 
+	if battle_session.is_finished():
+		call_deferred("_focus_return_button")
+	elif battle_session.is_target_selection_active():
+		_configure_target_navigation()
+		call_deferred("_focus_first_target")
+	elif battle_session.can_accept_protagonist_command():
+		call_deferred("_focus_first_available_command")
+
+func _focus_return_button() -> void:
+	if _return_button == null or _return_button.disabled:
+		return
+
+	_return_button.grab_focus()
 
 func _on_return_button_pressed() -> void:
 	if battle_session == null or not battle_session.is_finished():

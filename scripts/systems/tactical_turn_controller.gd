@@ -2,25 +2,27 @@ class_name TacticalTurnController
 
 extends Node
 
-## Owns tactical turn state only.
-## It does not resolve side-view battles and does not own Squad or Unit data.
+## Owns tactical turn state, alert propagation and player movement commitment.
+## It never owns Unit/Squad data and never resolves side-view battles.
 
 const NOTICE_DISTANCE: int = 10
 
-
 signal state_changed(new_state: int)
+
 signal player_turn_started(
 	movement_budget: int,
 	initiative: int
 )
+
 signal enemy_turn_started(enemy_marker: TacticalEnemy)
+
 signal adjacent_enemies_available(
 	adjacent_enemies: Array[TacticalEnemy]
 )
 
 enum State {
 	FREE_EXPLORATION,
-	ALERT_PLAYER_TURN,
+	ALERT_PLAYER_MOVEMENT_SELECTION,
 	TACTICAL_ACTION_MENU,
 	BATTLE_TRANSITION,
 	ALERT_ENEMY_TURNS
@@ -29,60 +31,72 @@ enum State {
 
 var player_marker: TacticalPlayer
 var enemy_markers: Array[TacticalEnemy] = []
+var tactical_cursor: TacticalCursor
 
 var state: State = State.FREE_EXPLORATION
+
 var remaining_player_movement: int = 0
 
 var _turn_order: Array[Node] = []
 var _turn_index: int = -1
+var _reachable_player_cells: Array[Vector2i] = []
 
 
 func configure(
 	assigned_player_marker: TacticalPlayer,
-	assigned_enemy_markers: Array[TacticalEnemy]
+	assigned_enemy_markers: Array[TacticalEnemy],
+	assigned_cursor: TacticalCursor
 ) -> void:
 	player_marker = assigned_player_marker
 	enemy_markers = assigned_enemy_markers
+	tactical_cursor = assigned_cursor
 
 	if player_marker == null:
 		push_error("TacticalTurnController requires a TacticalPlayer.")
 		return
 
+	if tactical_cursor == null:
+		push_error("TacticalTurnController requires a TacticalCursor.")
+		return
+
 	player_marker.movement_requested.connect(
 		_on_player_movement_requested
 	)
-	player_marker.cell_changed.connect(_on_player_cell_changed)
 
 	player_marker.set_input_enabled(true)
+	tactical_cursor.end_selection()
 
 
 func is_free_exploration() -> bool:
 	return state == State.FREE_EXPLORATION
 
+
 func _unhandled_input(event: InputEvent) -> void:
-	if state != State.ALERT_PLAYER_TURN:
+	if state != State.ALERT_PLAYER_MOVEMENT_SELECTION:
 		return
 
-	if not event.is_action_pressed("ui_accept"):
-		return
+	if event.is_action_pressed("move_up"):
+		_move_cursor(Vector2i.UP)
+	elif event.is_action_pressed("move_down"):
+		_move_cursor(Vector2i.DOWN)
+	elif event.is_action_pressed("move_left"):
+		_move_cursor(Vector2i.LEFT)
+	elif event.is_action_pressed("move_right"):
+		_move_cursor(Vector2i.RIGHT)
+	elif event.is_action_pressed("ui_accept"):
+		_commit_selected_player_destination()
+	elif event.is_action_pressed("ui_cancel"):
+		_end_player_turn()
 
-	if _open_tactical_action_menu_if_possible():
-		get_viewport().set_input_as_handled()
-		return
-
-	end_player_turn()
 	get_viewport().set_input_as_handled()
+
 
 func cancel_tactical_action_menu() -> void:
 	if state != State.TACTICAL_ACTION_MENU:
 		return
 
-	state = State.ALERT_PLAYER_TURN
-	player_marker.set_input_enabled(true)
+	_begin_player_movement_selection()
 
-	state_changed.emit(state)
-
-	print("Main Squad cancelled its tactical action selection.")
 
 func get_adjacent_enemies() -> Array[TacticalEnemy]:
 	var adjacent_enemies: Array[TacticalEnemy] = []
@@ -106,6 +120,8 @@ func begin_battle_transition() -> void:
 
 	state = State.BATTLE_TRANSITION
 	player_marker.set_input_enabled(false)
+	tactical_cursor.end_selection()
+
 	state_changed.emit(state)
 
 
@@ -113,152 +129,103 @@ func resume_after_player_action() -> void:
 	if state != State.BATTLE_TRANSITION:
 		return
 
-	remaining_player_movement = 0
 	_advance_to_next_turn()
 
 
-func _open_tactical_action_menu_if_possible() -> bool:
-	var adjacent_enemies := get_adjacent_enemies()
-
-	if adjacent_enemies.is_empty():
-		return false
-
-	state = State.TACTICAL_ACTION_MENU
-	player_marker.set_input_enabled(false)
-
-	state_changed.emit(state)
-	adjacent_enemies_available.emit(adjacent_enemies)
-
-	return true
-
 func _on_player_movement_requested(direction: Vector2i) -> void:
-	if player_marker == null:
+	if state != State.FREE_EXPLORATION:
 		return
 
 	var target_cell: Vector2i = player_marker.cell + direction
 
 	if _is_enemy_occupying(target_cell):
-		print("Main Squad cannot move onto an enemy squad token.")
 		return
 
-	if state == State.FREE_EXPLORATION:
-		var moved_in_exploration := player_marker.move_by(direction)
-
-		if not moved_in_exploration:
-			return
-
-		_advance_free_exploration_patrols()
-		_check_for_enemy_notice()
+	if not player_marker.move_by(direction):
 		return
 
-	if state != State.ALERT_PLAYER_TURN:
-		return
+	_advance_free_exploration_patrols()
+	_refresh_alert_state()
 
-	if remaining_player_movement <= 0:
-		end_player_turn()
-		return
-
-	var moved_in_alert := player_marker.move_by(direction)
-
-	if not moved_in_alert:
-		return
-
-	remaining_player_movement -= 1
-
-	print(
-		"Main Squad moved. Remaining movement: %d."
-		% remaining_player_movement
-	)
-
-	if remaining_player_movement <= 0:
-		end_player_turn()
 
 func _advance_free_exploration_patrols() -> void:
-	if state != State.FREE_EXPLORATION:
-		return
-
-	for enemy_marker: TacticalEnemy in enemy_markers:
-		if enemy_marker == null or enemy_marker.is_defeated():
-			continue
-
-		if enemy_marker.ai_mode != TacticalEnemy.AiMode.PATROL:
-			continue
-
-		var next_patrol_cell := enemy_marker.get_next_patrol_cell()
-
-		if next_patrol_cell == player_marker.cell:
-			continue
-
-		if _is_enemy_occupying_by_other_enemy(
-			next_patrol_cell,
-			enemy_marker
-		):
-			continue
-
-		if enemy_marker.advance_patrol():
-			print(
-				"%s patrolled to %s."
-				% [enemy_marker.squad.display_name, enemy_marker.cell]
-			)
-
-func _is_enemy_occupying_by_other_enemy(
-	target_cell: Vector2i,
-	excluded_enemy: TacticalEnemy
-) -> bool:
 	for enemy_marker: TacticalEnemy in enemy_markers:
 		if (
 			enemy_marker == null
-			or enemy_marker == excluded_enemy
 			or enemy_marker.is_defeated()
+			or enemy_marker.ai_mode != TacticalEnemy.AiMode.PATROL
 		):
 			continue
 
-		if enemy_marker.cell == target_cell:
-			return true
+		var next_cell := enemy_marker.get_next_patrol_cell()
 
-	return false
+		if (
+			next_cell == player_marker.cell
+			or _is_enemy_occupying_by_other_enemy(
+				next_cell,
+				enemy_marker
+			)
+		):
+			continue
 
-func _on_player_cell_changed(
-	_previous_cell: Vector2i,
-	_new_cell: Vector2i
-) -> void:
-	if state == State.FREE_EXPLORATION:
-		_check_for_enemy_notice()
+		enemy_marker.advance_patrol()
 
 
-func _check_for_enemy_notice() -> void:
-	if player_marker == null:
-		return
-
-	var noticed_enemy: TacticalEnemy = null
+func _refresh_alert_state() -> void:
+	var alerted_enemies := _get_alerted_enemy_chain()
 
 	for enemy_marker: TacticalEnemy in enemy_markers:
 		if enemy_marker == null or enemy_marker.is_defeated():
 			continue
 
-		var distance_to_player: int = (
-			enemy_marker.get_manhattan_distance_to(player_marker.cell)
-		)
+		enemy_marker.set_alert(enemy_marker in alerted_enemies)
 
-		if distance_to_player <= NOTICE_DISTANCE:
-			enemy_marker.set_alert(true)
-
-			if noticed_enemy == null:
-				noticed_enemy = enemy_marker
-
-	if noticed_enemy != null and state == State.FREE_EXPLORATION:
-		print(
-			"%s noticed the Main Squad at %d tiles."
-			% [
-				noticed_enemy.squad.display_name,
-				noticed_enemy.get_manhattan_distance_to(
-					player_marker.cell
-				)
-			]
-		)
-
+	if state == State.FREE_EXPLORATION and not alerted_enemies.is_empty():
 		_begin_alert_state()
+		return
 
+	if (
+		state != State.FREE_EXPLORATION
+		and alerted_enemies.is_empty()
+	):
+		_end_alert_state()
+
+func _get_alerted_enemy_chain() -> Array[TacticalEnemy]:
+	var alerted_enemies: Array[TacticalEnemy] = []
+	var pending_enemies: Array[TacticalEnemy] = []
+
+	for enemy_marker: TacticalEnemy in enemy_markers:
+		if enemy_marker == null or enemy_marker.is_defeated():
+			continue
+
+		if (
+			enemy_marker.get_manhattan_distance_to(player_marker.cell)
+			<= NOTICE_DISTANCE
+		):
+			alerted_enemies.append(enemy_marker)
+			pending_enemies.append(enemy_marker)
+
+	while not pending_enemies.is_empty():
+		var alert_source: TacticalEnemy = pending_enemies.pop_front()
+
+		for candidate_enemy: TacticalEnemy in enemy_markers:
+			if (
+				candidate_enemy == null
+				or candidate_enemy.is_defeated()
+				or candidate_enemy in alerted_enemies
+			):
+				continue
+
+			if (
+				candidate_enemy.get_manhattan_distance_to(
+					alert_source.cell
+				)
+				<= NOTICE_DISTANCE
+			):
+				alerted_enemies.append(candidate_enemy)
+				pending_enemies.append(candidate_enemy)
+
+	return alerted_enemies
 
 func _begin_alert_state() -> void:
 	if state != State.FREE_EXPLORATION:
@@ -266,10 +233,36 @@ func _begin_alert_state() -> void:
 
 	print("Alert tactical state started.")
 
+	## Leave FREE_EXPLORATION before rebuilding the round.
+	## _start_new_alert_round() refreshes alert status again.
+	state = State.ALERT_ENEMY_TURNS
+	player_marker.set_input_enabled(false)
+	tactical_cursor.end_selection()
+
+	state_changed.emit(state)
+
 	_start_new_alert_round()
+
+func _end_alert_state() -> void:
+	print("No enemy squads remain alert. Free exploration resumed.")
+
+	state = State.FREE_EXPLORATION
+	_turn_order.clear()
+	_turn_index = -1
+	_reachable_player_cells.clear()
+
+	tactical_cursor.end_selection()
+	player_marker.set_input_enabled(true)
+
+	state_changed.emit(state)
 
 
 func _start_new_alert_round() -> void:
+	_refresh_alert_state()
+
+	if state == State.FREE_EXPLORATION:
+		return
+
 	_turn_order.clear()
 
 	if player_marker != null:
@@ -279,6 +272,7 @@ func _start_new_alert_round() -> void:
 		if enemy_marker == null or enemy_marker.is_defeated():
 			continue
 
+		## Every living enemy gets a turn during global alert.
 		_turn_order.append(enemy_marker)
 
 	_turn_order.sort_custom(_sort_turn_actors)
@@ -291,8 +285,8 @@ func _sort_turn_actors(
 	left_actor: Node,
 	right_actor: Node
 ) -> bool:
-	var left_initiative: int = _get_actor_initiative(left_actor)
-	var right_initiative: int = _get_actor_initiative(right_actor)
+	var left_initiative := _get_actor_initiative(left_actor)
+	var right_initiative := _get_actor_initiative(right_actor)
 
 	if left_initiative == right_initiative:
 		return left_actor == player_marker
@@ -330,38 +324,123 @@ func _advance_to_next_turn() -> void:
 
 	_advance_to_next_turn()
 
+
 func _begin_player_turn() -> void:
-	state = State.ALERT_PLAYER_TURN
 	remaining_player_movement = (
 		player_marker.squad.get_alert_movement_budget()
 	)
 
-	player_marker.set_input_enabled(true)
+	player_marker.set_input_enabled(false)
 
-	state_changed.emit(state)
 	player_turn_started.emit(
 		remaining_player_movement,
 		player_marker.squad.get_alert_initiative()
 	)
 
-	print(
-		"Main Squad turn — movement: %d, initiative: %d."
-		% [
-			remaining_player_movement,
-			player_marker.squad.get_alert_initiative()
-		]
+	_begin_player_movement_selection()
+
+
+func _begin_player_movement_selection() -> void:
+	state = State.ALERT_PLAYER_MOVEMENT_SELECTION
+
+	_reachable_player_cells = _get_reachable_player_cells(
+		player_marker.cell,
+		remaining_player_movement
 	)
 
-func end_player_turn() -> void:
-	if state != State.ALERT_PLAYER_TURN:
+	tactical_cursor.begin_selection(
+		player_marker.cell,
+		_reachable_player_cells
+	)
+
+	state_changed.emit(state)
+
+func _get_reachable_player_cells(
+	start_cell: Vector2i,
+	movement_budget: int
+) -> Array[Vector2i]:
+	var reachable_cells: Array[Vector2i] = [start_cell]
+	var distances: Dictionary = {start_cell: 0}
+	var pending_cells: Array[Vector2i] = [start_cell]
+
+	while not pending_cells.is_empty():
+		var current_cell: Vector2i = pending_cells.pop_front()
+		var current_distance: int = distances[current_cell]
+
+		if current_distance >= movement_budget:
+			continue
+
+		for neighbor_cell: Vector2i in (
+			player_marker.get_walkable_neighbor_cells(current_cell)
+		):
+			if (
+				neighbor_cell != start_cell
+				and _is_enemy_occupying(neighbor_cell)
+			):
+				continue
+
+			if distances.has(neighbor_cell):
+				continue
+
+			distances[neighbor_cell] = current_distance + 1
+			reachable_cells.append(neighbor_cell)
+			pending_cells.append(neighbor_cell)
+
+	return reachable_cells
+
+func _move_cursor(direction: Vector2i) -> void:
+	tactical_cursor.move_by(direction)
+
+
+func _commit_selected_player_destination() -> void:
+	var destination_cell := tactical_cursor.cell
+
+	if not destination_cell in _reachable_player_cells:
 		return
 
-	print("Main Squad ended its turn.")
+	tactical_cursor.end_selection()
 
-	remaining_player_movement = 0
+	if destination_cell != player_marker.cell:
+		player_marker.move_to(destination_cell)
+
+	if _open_tactical_action_menu_if_possible():
+		return
+
+	_end_player_turn()
+
+
+func _open_tactical_action_menu_if_possible() -> bool:
+	var adjacent_enemies := get_adjacent_enemies()
+
+	if adjacent_enemies.is_empty():
+		return false
+
+	state = State.TACTICAL_ACTION_MENU
 	player_marker.set_input_enabled(false)
 
+	state_changed.emit(state)
+	adjacent_enemies_available.emit(adjacent_enemies)
+
+	return true
+
+
+func _end_player_turn() -> void:
+	if (
+		state != State.ALERT_PLAYER_MOVEMENT_SELECTION
+		and state != State.TACTICAL_ACTION_MENU
+	):
+		return
+
+	tactical_cursor.end_selection()
+	remaining_player_movement = 0
+
+	_refresh_alert_state()
+
+	if state == State.FREE_EXPLORATION:
+		return
+
 	_advance_to_next_turn()
+
 
 func _is_enemy_occupying(target_cell: Vector2i) -> bool:
 	for enemy_marker: TacticalEnemy in enemy_markers:
@@ -373,37 +452,48 @@ func _is_enemy_occupying(target_cell: Vector2i) -> bool:
 
 	return false
 
+
+func _is_enemy_occupying_by_other_enemy(
+	target_cell: Vector2i,
+	excluded_enemy: TacticalEnemy
+) -> bool:
+	for enemy_marker: TacticalEnemy in enemy_markers:
+		if (
+			enemy_marker == null
+			or enemy_marker == excluded_enemy
+			or enemy_marker.is_defeated()
+		):
+			continue
+
+		if enemy_marker.cell == target_cell:
+			return true
+
+	return false
+
+
 func _begin_enemy_turn(active_enemy_marker: TacticalEnemy) -> void:
 	state = State.ALERT_ENEMY_TURNS
 	player_marker.set_input_enabled(false)
+	tactical_cursor.end_selection()
 
 	state_changed.emit(state)
 	enemy_turn_started.emit(active_enemy_marker)
 
 	if active_enemy_marker.ai_mode == TacticalEnemy.AiMode.PATROL:
-		var next_patrol_cell := active_enemy_marker.get_next_patrol_cell()
+		var next_cell := active_enemy_marker.get_next_patrol_cell()
 
 		if (
-			next_patrol_cell != player_marker.cell
+			next_cell != player_marker.cell
 			and not _is_enemy_occupying_by_other_enemy(
-				next_patrol_cell,
+				next_cell,
 				active_enemy_marker
 			)
 		):
 			active_enemy_marker.advance_patrol()
 
-		print(
-			"%s turn — PATROL at %s."
-			% [
-				active_enemy_marker.squad.display_name,
-				active_enemy_marker.cell
-			]
-		)
-	else:
-		print(
-			"%s turn — STATIC."
-			% active_enemy_marker.squad.display_name
-		)
+	_refresh_alert_state()
 
-	_check_for_enemy_notice()
+	if state == State.FREE_EXPLORATION:
+		return
+
 	_advance_to_next_turn()

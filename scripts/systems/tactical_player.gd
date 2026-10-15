@@ -50,6 +50,28 @@ func get_leader() -> Unit:
 	return squad.get_leader()
 
 
+func is_cell_walkable(target_cell: Vector2i) -> bool:
+	return _grid != null and _grid.is_walkable(target_cell)
+
+
+func get_walkable_neighbor_cells(
+	from_cell: Vector2i
+) -> Array[Vector2i]:
+	var walkable_neighbors: Array[Vector2i] = []
+
+	for direction: Vector2i in [
+		Vector2i.UP,
+		Vector2i.DOWN,
+		Vector2i.LEFT,
+		Vector2i.RIGHT
+	]:
+		var target_cell: Vector2i = from_cell + direction
+
+		if is_cell_walkable(target_cell):
+			walkable_neighbors.append(target_cell)
+
+	return walkable_neighbors
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not _input_enabled:
 		return
@@ -63,13 +85,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("move_right"):
 		movement_requested.emit(Vector2i.RIGHT)
 
+
 func move_by(direction: Vector2i) -> bool:
-	if _grid == null:
-		return false
+	return move_to(cell + direction)
 
-	var target_cell: Vector2i = cell + direction
 
-	if not _grid.is_walkable(target_cell):
+func move_to(target_cell: Vector2i) -> bool:
+	if not is_cell_walkable(target_cell):
 		return false
 
 	var previous_cell: Vector2i = cell
@@ -80,8 +102,10 @@ func move_by(direction: Vector2i) -> bool:
 
 	return true
 
+
 func get_cell_center(target_cell: Vector2i) -> Vector2:
 	var cell_offset: Vector2 = Vector2(target_cell.x, target_cell.y) * _cell_size
+
 	return _grid_origin + cell_offset + Vector2.ONE * (_cell_size * 0.5)
 
 
@@ -89,7 +113,6 @@ func _draw() -> void:
 	draw_squad_label()
 	draw_health_bar()
 
-	# Temporary Main Squad token.
 	draw_circle(Vector2.ZERO, 38.0, Color("#d8c06b"))
 	draw_circle(Vector2.ZERO, 27.0, Color("#f4e39a"))
 	draw_circle(Vector2.ZERO, 38.0, Color("#fff1b0"), false, 4.0)
