@@ -9,9 +9,9 @@ const StrategyPromptData = preload(
 
 const VIEWPORT_SIZE: Vector2 = Vector2(1920.0, 1080.0)
 
-const GRID_ORIGIN: Vector2 = Vector2(180.0, 180.0)
-const GRID_SIZE: Vector2i = Vector2i(13, 6)
-const CELL_SIZE: float = 120.0
+const GRID_ORIGIN: Vector2 = Vector2(168.0, 108.0)
+const GRID_SIZE: Vector2i = Vector2i(22, 12)
+const CELL_SIZE: float = 72.0
 
 ## This is a strategic engagement radius, not weapon range.
 ## It represents noticing, approaching and committing before the
@@ -38,7 +38,7 @@ enum EncounterState {
 
 @onready var player_marker: TacticalPlayer = $PlayerMarker
 @onready var enemy_marker: TacticalEnemy = $EnemyMarker
-
+var enemy_markers: Array[TacticalEnemy] = []
 var tactical_grid: TacticalGrid
 var test_enemy_squad: Squad
 var strategy_prompt: StrategyPrompt
@@ -51,42 +51,6 @@ var selected_enemy_marker: TacticalEnemy
 func _ready() -> void:
 	tactical_grid = TacticalGrid.new(GRID_SIZE)
 	configure_test_map()
-
-	test_enemy_squad = Squad.new(
-		"corrupted_sewer_pack",
-		"Corrupted Sewer Pack",
-		Squad.AutonomyMode.ENEMY
-	)
-
-	test_enemy_squad.default_strategy = &"support"
-
-	var sewer_beast := Unit.new(
-		"corrupted_sewer_beast",
-		"Corrupted Sewer Beast",
-		1,
-		30,
-		10,
-		3,
-		5,
-		0
-	)
-
-	var corrupted_acolyte := Unit.new(
-		"corrupted_acolyte",
-		"Corrupted Acolyte",
-		1,
-		18,
-		4,
-		2,
-		6,
-		8,
-		12
-	)
-
-	corrupted_acolyte.learn_ability(&"patch_flesh")
-
-	test_enemy_squad.add_member(sewer_beast)
-	test_enemy_squad.add_member(corrupted_acolyte)
 
 	var main_squad: Squad = GameState.get_main_squad()
 
@@ -102,27 +66,76 @@ func _ready() -> void:
 		main_squad
 	)
 
+	test_enemy_squad = _create_enemy_squad(
+		"corrupted_sewer_pack",
+		"Corrupted Sewer Pack",
+		"Sewer Beast",
+		30,
+		10,
+		3,
+		5,
+		true
+	)
+
 	enemy_marker.configure(
 		tactical_grid,
 		GRID_ORIGIN,
 		CELL_SIZE,
-		Vector2i(12, 5),
+		Vector2i(18, 9),
 		10,
 		test_enemy_squad
 	)
 
 	enemy_marker.configure_patrol([
-		Vector2i(12, 5),
-		Vector2i(11, 5),
-		Vector2i(10, 5),
-		Vector2i(9, 5),
-		Vector2i(10, 5),
-		Vector2i(11, 5)
+		Vector2i(18, 9),
+		Vector2i(17, 9),
+		Vector2i(16, 9),
+		Vector2i(15, 9),
+		Vector2i(16, 9),
+		Vector2i(17, 9)
 	])
+
+	var canal_patrol := _create_enemy_marker(
+		"canal_patrol",
+		"Canal Rats",
+		"Canal Rat",
+		22,
+		7,
+		2,
+		6,
+		Vector2i(11, 9)
+	)
+
+	canal_patrol.configure_patrol([
+		Vector2i(11, 9),
+		Vector2i(10, 9),
+		Vector2i(9, 9),
+		Vector2i(8, 9),
+		Vector2i(9, 9),
+		Vector2i(10, 9)
+	])
+
+	var static_guard := _create_enemy_marker(
+		"sluice_guard",
+		"Sluice Guard",
+		"Corrupted Guard",
+		38,
+		12,
+		4,
+		4,
+		Vector2i(18, 2)
+	)
+
+	enemy_markers = [
+		enemy_marker,
+		canal_patrol,
+		static_guard
+	]
 
 	strategy_prompt = StrategyPromptData.new()
 	add_child(strategy_prompt)
 	strategy_prompt.strategy_selected.connect(_on_strategy_selected)
+
 	tactical_action_prompt = TacticalActionPromptData.new()
 	add_child(tactical_action_prompt)
 	tactical_action_prompt.attack_selected.connect(
@@ -131,40 +144,145 @@ func _ready() -> void:
 	tactical_action_prompt.cancelled.connect(
 		_on_tactical_action_cancelled
 	)
-	var test_enemy_markers: Array[TacticalEnemy] = [
-		enemy_marker
-	]
 
 	turn_controller = TacticalTurnControllerData.new()
 	add_child(turn_controller)
 
 	turn_controller.configure(
 		player_marker,
-		test_enemy_markers
+		enemy_markers
 	)
-	
+
 	turn_controller.adjacent_enemies_available.connect(
 		_on_adjacent_enemies_available
 	)
-	
+
 	queue_redraw()
 
-func configure_test_map() -> void:
-	# The blue canal occupies rows 2 and 3.
-	# A narrow bridge is left open in columns 6 and 7.
-	for column in range(GRID_SIZE.x):
-		tactical_grid.set_blocked(Vector2i(column, 2))
-		tactical_grid.set_blocked(Vector2i(column, 3))
+func _create_enemy_marker(
+	squad_id: StringName,
+	squad_name: String,
+	unit_name: String,
+	max_hp: int,
+	attack: int,
+	defense: int,
+	agility: int,
+	start_cell: Vector2i
+) -> TacticalEnemy:
+	var enemy_squad := _create_enemy_squad(
+		squad_id,
+		squad_name,
+		unit_name,
+		max_hp,
+		attack,
+		defense,
+		agility
+	)
 
-	for bridge_column in range(6, 8):
+	var marker := TacticalEnemy.new()
+	add_child(marker)
+
+	marker.configure(
+		tactical_grid,
+		GRID_ORIGIN,
+		CELL_SIZE,
+		start_cell,
+		10,
+		enemy_squad
+	)
+
+	return marker
+
+func _create_enemy_squad(
+	squad_id: StringName,
+	squad_name: String,
+	unit_name: String,
+	max_hp: int,
+	attack: int,
+	defense: int,
+	agility: int,
+	include_support_acolyte: bool = false
+) -> Squad:
+	var enemy_squad := Squad.new(
+		squad_id,
+		squad_name,
+		Squad.AutonomyMode.ENEMY
+	)
+
+	enemy_squad.default_strategy = &"support"
+
+	var enemy_unit := Unit.new(
+		"%s_unit" % squad_id,
+		unit_name,
+		1,
+		max_hp,
+		attack,
+		defense,
+		agility,
+		0
+	)
+
+	enemy_squad.add_member(enemy_unit)
+
+	if not include_support_acolyte:
+		return enemy_squad
+
+	var corrupted_acolyte := Unit.new(
+		"corrupted_acolyte",
+		"Corrupted Acolyte",
+		1,
+		18,
+		4,
+		2,
+		6,
+		8,
+		12
+	)
+
+	corrupted_acolyte.learn_ability(&"patch_flesh")
+	enemy_squad.add_member(corrupted_acolyte)
+
+	return enemy_squad
+
+func configure_test_map() -> void:
+	# Central water channel: rows 5 and 6.
+	for column in range(GRID_SIZE.x):
+		tactical_grid.set_blocked(Vector2i(column, 5))
+		tactical_grid.set_blocked(Vector2i(column, 6))
+
+	# West bridge: early safe route into the southern half.
+	for bridge_column in range(4, 7):
 		tactical_grid.set_blocked(
-			Vector2i(bridge_column, 2),
+			Vector2i(bridge_column, 5),
 			false
 		)
 		tactical_grid.set_blocked(
-			Vector2i(bridge_column, 3),
+			Vector2i(bridge_column, 6),
 			false
 		)
+
+	# East bridge: contested route near the static guard.
+	for bridge_column in range(15, 18):
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 5),
+			false
+		)
+		tactical_grid.set_blocked(
+			Vector2i(bridge_column, 6),
+			false
+		)
+
+	# Northern sewer wall: creates a long route around the Sluice Guard.
+	for column in range(7, 14):
+		tactical_grid.set_blocked(Vector2i(column, 2))
+
+	tactical_grid.set_blocked(Vector2i(10, 2), false)
+
+	# Southern rubble: turns the Canal Rats patrol into a readable chokepoint.
+	for column in range(12, 16):
+		tactical_grid.set_blocked(Vector2i(column, 10))
+
+	tactical_grid.set_blocked(Vector2i(13, 10), false)
 
 func _unhandled_input(_event: InputEvent) -> void:
 	pass
@@ -291,32 +409,48 @@ func on_game_presentation_finished(
 	print("Battle presentation closed. Tactical alert resumed.")
 
 func _draw() -> void:
-	# Temporary background: this will later be a prerendered tactical map.
 	draw_rect(
 		Rect2(Vector2.ZERO, VIEWPORT_SIZE),
 		Color("#18242c")
 	)
 
-	# Temporary walkable area.
+	var grid_pixel_size := Vector2(GRID_SIZE) * CELL_SIZE
+
 	draw_rect(
-		Rect2(GRID_ORIGIN, Vector2(1560.0, 720.0)),
+		Rect2(GRID_ORIGIN, grid_pixel_size),
 		Color("#304a4f")
 	)
 
-	# Temporary water channel.
+	var canal_top_left := (
+		GRID_ORIGIN
+		+ Vector2(0.0, 5.0 * CELL_SIZE)
+	)
+
 	draw_rect(
-		Rect2(0.0, 460.0, 1800.0, 180.0),
+		Rect2(
+			canal_top_left,
+			Vector2(grid_pixel_size.x, CELL_SIZE * 2.0)
+		),
 		Color("#163b56")
 	)
 
-	# Temporary bridge that corresponds to the two walkable cells.
 	draw_rect(
-		Rect2(900.0, 420.0, 240.0, 240.0),
+		Rect2(
+			GRID_ORIGIN + Vector2(4.0 * CELL_SIZE, 5.0 * CELL_SIZE),
+			Vector2(CELL_SIZE * 3.0, CELL_SIZE * 2.0)
+		),
+		Color("#796044")
+	)
+
+	draw_rect(
+		Rect2(
+			GRID_ORIGIN + Vector2(15.0 * CELL_SIZE, 5.0 * CELL_SIZE),
+			Vector2(CELL_SIZE * 3.0, CELL_SIZE * 2.0)
+		),
 		Color("#796044")
 	)
 
 	draw_grid()
-
 
 func draw_grid() -> void:
 	var grid_pixel_size := Vector2(GRID_SIZE.x, GRID_SIZE.y) * CELL_SIZE
