@@ -1,13 +1,21 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://cq4lbqo2cg8rv"]
 
-[ext_resource type="Script" path="res://scripts/exploration/room_destination_test.gd" id="1_destination"]
-[ext_resource type="Texture2D" path="res://assets/backgrounds/sewer_corridor.png" id="2_background"]
+[ext_resource type="Script" uid="uid://embnywo1xnp8" path="res://scripts/exploration/sewer_corridor_test.gd" id="1_corridor"]
+[ext_resource type="Texture2D" uid="uid://blos7tmbhj1hn" path="res://assets/backgrounds/sewer_corridor.png" id="2_background"]
+[ext_resource type="Resource" path="res://assets/calibration/sewer_corridor_2026-10-16T21-44-47.tres" id="2_euidi"]
+[ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="3_player"]
 
-[node name="SewerCorridorTest" type="Node2D"]
-script = ExtResource("1_destination")
-location_name = "Sewer Corridor"
+[node name="SewerCorridorTest" type="Node2D" unique_id=817142198]
+script = ExtResource("1_corridor")
+grid_size = Vector2i(12, 4)
+start_cell = Vector2i(0, 1)
+grid_calibration = ExtResource("2_euidi")
 
-[node name="Background" type="Sprite2D" parent="."]
+[node name="Background" type="Sprite2D" parent="." unique_id=1008484902]
 z_index = -10
 texture = ExtResource("2_background")
 centered = false
+
+[node name="PlayerMarker" type="Node2D" parent="." unique_id=222568564]
+z_index = 10
+script = ExtResource("3_player")
