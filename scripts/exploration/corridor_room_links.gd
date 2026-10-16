@@ -1,7 +1,10 @@
 extends "res://scripts/exploration/sewer_corridor_test.gd"
 
-const CombatControllerScript = preload(
-    "res://scripts/exploration/corridor_combat_controller.gd"
+const MapRuntimeScript = preload(
+    "res://scripts/systems/tactical_map_runtime.gd"
+)
+const SewerEnemyContent = preload(
+    "res://scripts/content/sewer_enemy_content.gd"
 )
 
 const MAINTENANCE_SCENE_PATH: String = (
@@ -17,14 +20,12 @@ enum Destination {
 	Vector2i(11, 0)
 ]
 
-## One token for the entire three-rat Squad.
-## Provisional: validate against the rendered floor.
 @export var rat_start_cell: Vector2i = Vector2i(11, 3)
 
 var _selected_destination: Destination = Destination.ENTRANCE
 var _maintenance_active: bool = false
 var _combat_presentation_active: bool = false
-var _combat: CombatControllerScript
+var _runtime: MapRuntimeScript
 
 
 func _ready() -> void:
@@ -33,8 +34,6 @@ func _ready() -> void:
 	if tactical_grid == null or player_marker.squad == null:
 		return
 
-	# The calibration root normally handles free movement.
-	# Disconnect it before attaching the turncontroller.
 	if player_marker.movement_requested.is_connected(
 		_on_movement_requested
 	):
@@ -42,29 +41,46 @@ func _ready() -> void:
 			_on_movement_requested
 		)
 
-	var controller := CombatControllerScript.new()
-	add_child(controller)
+	var runtime := MapRuntimeScript.new()
+	add_child(runtime)
 
-	var configured: bool = controller.configure(
+	var spawns: Array[TacticalEnemySpawn] = [
+		TacticalEnemySpawn.new(
+			&"corridor_sewer_rats",
+			rat_start_cell,
+			SewerEnemyContent.create_corridor_rat_squad
+		)
+	]
+
+	var configured: bool = runtime.configure(
 		self,
 		player_marker,
 		tactical_grid,
 		projection,
-		rat_start_cell
+		"sewer_corridor",
+		spawns
 	)
 
 	if not configured:
-		controller.queue_free()
+		runtime.queue_free()
 		player_marker.set_input_enabled(false)
-		_exit_hint.text = "Ratten configureren mislukt. Controleer Output."
+		_exit_hint.text = (
+            "Tactical map configureren mislukt. Controleer Output."
+		)
 		return
 
-	_combat = controller
+	_runtime = runtime
+
+	_runtime.status_changed.connect(_update_exit_hint)
+	_runtime.presentation_active_changed.connect(
+		set_combat_presentation_active
+	)
+
 	_update_exit_hint()
 
 
 func _on_movement_requested(_direction: Vector2i) -> void:
-	# Movement is handled exclusively by the tactical turncontroller.
+	# The shared turncontroller is the exclusive movement owner.
 	pass
 
 
@@ -72,11 +88,11 @@ func _update_exit_hint() -> void:
 	if _exit_hint == null:
 		return
 
-	if _combat == null:
+	if _runtime == null:
 		super._update_exit_hint()
 		return
 
-	if _combat.can_open_door():
+	if _runtime.can_open_door():
 		if maintenance_cells.has(player_marker.cell):
 			_exit_hint.text = (
                 "Naar de maintenance room"
@@ -91,11 +107,11 @@ func _update_exit_hint() -> void:
 			)
 			return
 
-	_exit_hint.text = _combat.get_status_text()
+	_exit_hint.text = _runtime.get_status_text()
 
 
 func _input(event: InputEvent) -> void:
-	if _exit_hint == null or _transitioning or _combat == null:
+	if _exit_hint == null or _transitioning or _runtime == null:
 		return
 
 	if not event is InputEventKey:
@@ -120,14 +136,14 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if key_event.keycode == KEY_F2:
-		if not _combat.can_calibrate():
+		if not _runtime.can_calibrate():
 			get_viewport().set_input_as_handled()
 		return
 
 	if not _is_confirm_key(key_event.keycode):
 		return
 
-	if not _combat.can_open_door():
+	if not _runtime.can_open_door():
 		return
 
 	if maintenance_cells.has(player_marker.cell):
@@ -137,7 +153,7 @@ func _input(event: InputEvent) -> void:
 	else:
 		return
 
-	_combat.set_suspended(true)
+	_runtime.set_suspended(true)
 	_open_exit_menu()
 	get_viewport().set_input_as_handled()
 
@@ -198,12 +214,12 @@ func _close_exit_menu() -> void:
 	_exit_menu_open = false
 	_exit_overlay.hide()
 
-	_combat.set_suspended(false)
+	_runtime.set_suspended(false)
 	_update_exit_hint()
 
 
 func _travel_to_selected_destination() -> void:
-	_combat.save_room_state()
+	_runtime.save_room_state()
 
 	if _selected_destination == Destination.ENTRANCE:
 		_return_to_entrance()
@@ -215,7 +231,7 @@ func _travel_to_selected_destination() -> void:
 		)
 		return
 
-	_combat.set_suspended(true)
+	_runtime.set_suspended(true)
 	set_process_unhandled_input(false)
 	_maintenance_active = true
 
@@ -235,8 +251,8 @@ func _travel_to_selected_destination() -> void:
 func _recover_from_return_error(message: String) -> void:
 	_transitioning = false
 
-	if _combat != null:
-		_combat.set_suspended(false)
+	if _runtime != null:
+		_runtime.set_suspended(false)
 
 	_exit_hint.text = message
 	push_warning(message)
@@ -254,7 +270,7 @@ func on_game_presentation_finished(context: Variant) -> void:
 
 	if _combat_presentation_active:
 		set_combat_presentation_active(false)
-		_combat.finish_battle(context)
+		_runtime.finish_battle(context)
 		return
 
 	if not _maintenance_active:
@@ -267,7 +283,7 @@ func on_game_presentation_finished(context: Variant) -> void:
 	_transitioning = false
 
 	set_process_unhandled_input(true)
-	_combat.set_suspended(false)
+	_runtime.set_suspended(false)
 	_update_exit_hint()
 
 	print(
@@ -277,24 +293,24 @@ func on_game_presentation_finished(context: Variant) -> void:
 
 
 func _begin_calibration() -> void:
-	if _combat != null and not _combat.can_calibrate():
+	if _runtime != null and not _runtime.can_calibrate():
 		return
 
 	super._begin_calibration()
 
-	if _combat != null:
-		_combat.set_suspended(true)
+	if _runtime != null:
+		_runtime.set_suspended(true)
 
 
 func _finish_calibration() -> void:
 	super._finish_calibration()
 
-	if _combat != null:
-		_combat.set_suspended(false)
+	if _runtime != null:
+		_runtime.set_suspended(false)
 
 
 func _refresh_projection_visuals() -> void:
 	super._refresh_projection_visuals()
 
-	if _combat != null:
-		_combat.refresh_projection(projection)
+	if _runtime != null:
+		_runtime.refresh_projection(projection)
