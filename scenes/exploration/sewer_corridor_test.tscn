@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cq4lbqo2cg8rv"]
 
-[ext_resource type="Script" uid="uid://embnywo1xnp8" path="res://scripts/exploration/sewer_corridor_test.gd" id="1_corridor"]
+[ext_resource type="Script" uid="uid://cey4xe4l4dlnn" path="res://scripts/exploration/corridor_room_links.gd" id="1_corridor"]
 [ext_resource type="Texture2D" uid="uid://blos7tmbhj1hn" path="res://assets/backgrounds/sewer_corridor.png" id="2_background"]
 [ext_resource type="Resource" path="res://assets/calibration/sewer_corridor_2026-10-16T21-44-47.tres" id="2_euidi"]
 [ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="3_player"]

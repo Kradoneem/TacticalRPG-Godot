@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://haodtbft3g01"]
+
+[ext_resource type="Script" uid="uid://c5xpy8jl0mb5b" path="res://scripts/exploration/maintenance_test.gd" id="1_map"]
+[ext_resource type="Texture2D" uid="uid://d3edxi3tgooy" path="res://assets/backgrounds/sewer_maintenance.png" id="2_background"]
+[ext_resource type="Resource" path="res://assets/calibration/sewer_maintenance_2026-10-16T22-03-24.tres" id="2_wl5dj"]
+[ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="3_player"]
+
+[node name="SewerMaintenanceTest" type="Node2D" unique_id=626848346]
+script = ExtResource("1_map")
+start_cell = Vector2i(0, 1)
+grid_calibration = ExtResource("2_wl5dj")
+
+[node name="Background" type="Sprite2D" parent="." unique_id=646089607]
+z_index = -10
+texture = ExtResource("2_background")
+centered = false
+
+[node name="PlayerMarker" type="Node2D" parent="." unique_id=1585498611]
+z_index = 10
+script = ExtResource("3_player")
