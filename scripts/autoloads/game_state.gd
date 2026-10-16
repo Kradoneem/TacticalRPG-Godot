@@ -3,9 +3,8 @@ extends Node
 const UnitDataFactory = preload("res://scripts/domain/unit_data.gd")
 const SquadData = preload("res://scripts/domain/squad.gd")
 
-## Global game state.
-## This node is loaded once when the game starts and remains available
-## throughout scene changes.
+## Global gameplay state, retained across scene changes.
+## Room enemies do not belong to the player's squad roster.
 
 signal gold_changed(new_amount: int)
 signal day_advanced(new_day: float, reason: String)
@@ -31,6 +30,9 @@ var flags: Dictionary = {}
 var quest_states: Dictionary = {}
 var cleared_locations: Dictionary = {}
 
+## Session persistence only: not disk save/load.
+var exploration_room_states: Dictionary = {}
+
 
 func start_new_game() -> void:
 	party = UnitDataFactory.create_chapter_one_party()
@@ -38,6 +40,7 @@ func start_new_game() -> void:
 	equipment_inventory.clear()
 	item_inventory.clear()
 	squads.clear()
+	exploration_room_states.clear()
 
 	chapter = 1
 	day = 1.0
@@ -63,7 +66,7 @@ func start_new_game() -> void:
 func create_chapter_one_main_squad() -> void:
 	if party.size() < 2:
 		push_error(
-			"GameState could not create the Main Squad: "
+            "GameState could not create the Main Squad: "
 			+ "Chapter 1 needs at least two party members."
 		)
 		return
