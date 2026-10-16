@@ -553,3 +553,39 @@ Squad merging.
 Gekopieerde units tussen tactical en battle state.
 Gridposities op tijdelijke battle sprites.
 Een generieke SkillUnlockService.
+
+Afgeronde sessiemilestone: vier sewer-artplaceholders
+De gebruiker bevestigt dat alle kamers gereed zijn en dat ook de 4K asymmetrische kamer is gelukt. De Blender-scriptupdates zijn lokaal uitgevoerd; daadwerkelijke bestandsnamen, gekozen nummerachtervoegsels, Godot-import en Git-status moeten nog worden gecontroleerd.
+Elke uitvoering exporteert .blend, _color.png en _depth_normalized.png naar:
+~/ComfyUI/output/sewer_tactical_anchors/
+Herhaald uitvoeren gebruikt nummerachtervoegsels. .blend-export slaat het hele geopende Blender-document op onder een nieuwe actieve bestandsnaam, niet uitsluitend de nieuwe scene.
+Wat nog niet bewezen is
+Geen Godot-integratie, scrolling, gridkalibratie, collision of terrain-costs is in deze sessie gebouwd of getest.
+Niet vastgesteld welke assets of scripts al in de repository staan.
+Geen uniforme pixels-per-tegel-schaal voor alle vier backgrounds bevestigd.
+Geen perception-, lockpick-, cache-, verborgen-uitgang- of waterbewegingslogica geïmplementeerd.
+De eerdere maintenance-cache werd in de ComfyUI-output onvoldoende herkenbaar als afgesloten kist. Een aparte interactieve prop is daarom de voorgestelde vervolgaanpak, niet een afgeronde feature.
+Eerstvolgende technische stap
+Artwerk parkeren en de Godot-milestone herijken tegen actuele code. De bestaande technische prioriteit blijft BattleSession naar de vaste encounter-lifecycle, daarna tactical alert-turncontroller en grote exploration-testmap, tenzij de actuele repository of een nieuwe expliciete gebruikerskeuze aanleiding geeft om die volgorde te veranderen.
+De nieuwe chat begint met:
+Actuele lokale Git-status en laatste commit controleren.
+Huidige GitHub main-HEAD via API ophalen; daarna SHA-gepinde handoff en relevante code lezen.
+Vaststellen of de BattleSession-lifecycle inmiddels gereed is. Niet afgaan op oudere notities.
+Eén concrete volgende milestone kiezen. Als BattleSession nog ontbreekt: eerst die refactor. Als die gereed is: exploration/alert-loop met de grote map als testcontext.
+Bij eventuele assetintegratie: viewport 1080p behouden, grote achtergrond niet tot één scherm verkleinen, en gridprojectie/tegelschaal expliciet valideren.
+Lokale controles in ~/tactical-rpg:
+De laatste opdracht vereist ten minste twee commits. Inspecteer ook de actuele handoff-documenten en relevante scripts. Handoff-updates zorgvuldig samenvoegen, niet bestaande inhoud blind overschrijven. Na een afgeronde, geteste milestone: relevante bestanden committen en pushen. Bij remote: Internal Server Error: opnieuw git push origin main, niet force-pushen.Art-pipeline en resolutie
+Het beoogde spelvenster is 1920 × 1080. Achtergronden mogen groter zijn voor scrolling; viewportresolutie en achtergrondresolutie zijn verschillende zaken.
+De gekozen tactical-artpipeline is Blender-color-render als img2img-basis, met bijbehorende Blender-depth als SDXL Depth ControlNet-input. Niet teruggaan naar uitsluitend depth + per-kamer uitgebreide prompts zonder duidelijke noodzaak.
+Gebruik één vrijwel vaste sewer-stijlprompt. Layout, materiaalverdeling, openingen en belangrijke props komen primair uit Blender. Alleen een minimale contentaanpassing als die werkelijk nodig is.
+De gebruiker heeft vastgesteld dat verschillen tussen Blender-bases een belangrijke bron van stijlvariatie zijn. Controleer daarom eerst geometry, baksteen- en tegelmaten, voegen, camera, framing, materialen en belichting voordat je prompt of denoise verandert.
+Onderscheid cameraoriëntatie, orthographic scale, framing en pixels per wereldafstand. Gelijke oriëntatie en resolutie betekenen niet automatisch gelijke tegelschaal. Vergelijk achtergronden op werkelijke weergaveschaal, niet alleen op verkleinde previews.
+De huidige kleine achtergronden zijn 1080p; de grote asymmetrische map is 4K. Entrance en corridor gebruiken automatische framing, dus de serie heeft nog geen bewezen uniforme pixels-per-tegel-schaal. Dit niet opnieuw als opgelost presenteren.
+Blender 5.2: behoud de werkende Eevee- en compositorpatronen, inclusief Viewer-gebaseerde depth-export. Geen ongeteste overstap naar oudere compositor-API's.
+Lever bij scriptwijzigingen volledige vervangende scripts. Gebruik nieuwe exportnamen en bescherm bestaande bestanden tegen overschrijven. Pas de depth-afmetingencontrole samen met de renderresolutie aan.
+Houd renders reproduceerbaar. Verander één variabele per test; behoud checkpoint, seed, sampler en prompt tenzij juist die variabele wordt onderzocht.
+De huidige maps zijn gameplay-placeholders. Geen nieuwe art-polishronde beginnen voordat een gameplay-milestone dat nodig maakt.
+Interactieve props en licht
+Een in de achtergrond ingebakken cache of poort kan niet zichtbaar openen of verdwijnen door alleen een interactiezone toe te voegen. Gebruik later afzonderlijke props of passende beeldvarianten als een visuele toestand moet veranderen.
+Dynamisch fakkellicht is backlog: begin zo nodig met CanvasModulate + PointLight2D; normal maps en complexere schaduwen pas na een concrete behoefte.
+Perception en lockpicks zijn nieuwe contentwensen, nog geen geïmplementeerde regels. Ontdekken, slot openen en loot toekennen blijven afzonderlijke stappen. Verzin geen checkformules, verbruik of rewarddata.

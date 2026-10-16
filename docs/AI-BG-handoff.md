@@ -291,3 +291,24 @@ BattleSession refactor naar de vaste battle-lifecycle;
 tactical alert-turncontroller;
 grote exploration-testmap.
 Deze volgorde is geen onveranderlijk plan: toets haar steeds aan de actuele repository en de nieuwste ontwerpkeuze.
+
+Sewer art-baseline
+De eerdere depth + prompt-aanpak liet materiaalinterpretatie te vrij. Color + depth gaf betere herkenbaarheid van waterkanalen en betere samenhang. De stijl varieert nog, mede door verschillen in bronrenders en framing; gelijke prompt is geen garantie op gelijke stijl.
+De geleverde ComfyUI-workflow gebruikt daadwerkelijk DreamShaper XL, met checkpointbestandsnaam DreamShaperXL1.0Alpha2_fixedVae_half_00001_.safetensors. De oude labels waren misleidend; de NoobAI-nodes deden alleen een VAE-rondgang en zijn verwijderd. Niet zonder overleg wisselen van checkpoint om stijlvariatie te repareren.
+Workflowbaseline, niet noodzakelijk de laatste lokale instellingen:
+Color → VAE Encode → KSampler → VAE Decode → SaveImage.
+Bijbehorende depth → ImageInvert → SDXL Depth ControlNet.
+Denoise 0,55; depth strength 0,60; start 0,00 / end 0,55.
+35 steps; CFG 7,5; Euler / Karras.
+Seed 789571244948615, vast houden bij vergelijking.
+Negative prompt leeg.
+Bij color/depth-input dezelfde camera, uitsnede en afmetingen gebruiken.
+Img2img-resolutie volgt de color-input als er geen resize-node tussen zit. Full-resolution 4K-verwerking is zwaarder; exacte gebruikte verwerking en GPU-capaciteit nog niet vastgelegd.
+Vaste prompt:
+Layouts en ontwerpcontext
+Entrance: droge startkamer, linker entree met korte afdaling, afgesloten poort naar een korte donkere doorgang, kanaal aan de voorzijde.
+Corridor: 12 × 3 vloermodules, parallel waterkanaal, linker entree en uitgang rechtsachter.
+Maintenance: compacte 5 × 4 onderhoudsnis, L-kanaal, rooster, tonnen, planken en puin; cache als visueel prototype.
+Grote map: asymmetrische west- en oosthal met zijruimte; vier uitgangen; twee stenen bruggen en een ondiepe waadplek. Noordoostelijke uitgang mag later verborgen zijn maar wordt nu gewoon zichtbaar getoond.
+Waadplek is alleen visuele geometrie. Het materiaal is niet geschikt om daaruit automatisch walkability of waterdiepte af te leiden; terrain-state moet later expliciet in Godot worden vastgelegd.
+Waterwiel besproken maar geparkeerd om deze tests niet met een dominante prop te belasten.
