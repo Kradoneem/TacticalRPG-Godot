@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://assets/calibration/sewer_entrance_2026-10-16T21-23-17.tres" id="2_2ulkw"]
 [ext_resource type="Texture2D" uid="uid://buk0kkmatbs74" path="res://assets/backgrounds/sewer_entrance.png" id="2_background"]
 [ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="3_player"]
+[ext_resource type="Script" uid="uid://cl66yh5pmppr2" path="res://scripts/exploration/entrance_exit_interactions.gd" id="4_exits"]
 
 [node name="SewerEntranceTest" type="Node2D" unique_id=1754298389]
 script = ExtResource("1_test")
@@ -22,3 +23,6 @@ centered = false
 [node name="PlayerMarker" type="Node2D" parent="." unique_id=2087189147]
 z_index = 10
 script = ExtResource("3_player")
+
+[node name="ExitInteractions" type="Node" parent="." unique_id=1344610317]
+script = ExtResource("4_exits")

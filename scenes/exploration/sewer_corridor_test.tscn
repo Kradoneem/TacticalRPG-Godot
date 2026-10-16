@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/exploration/room_destination_test.gd" id="1_destination"]
+[ext_resource type="Texture2D" path="res://assets/backgrounds/sewer_corridor.png" id="2_background"]
+
+[node name="SewerCorridorTest" type="Node2D"]
+script = ExtResource("1_destination")
+location_name = "Sewer Corridor"
+
+[node name="Background" type="Sprite2D" parent="."]
+z_index = -10
+texture = ExtResource("2_background")
+centered = false
