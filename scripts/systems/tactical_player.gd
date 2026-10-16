@@ -1,12 +1,14 @@
 class_name TacticalPlayer
-
 extends Node2D
 
-## Tactical representation of the Main Squad.
-## One tactical token represents one entire Squad, not an individual Unit.
+## One tactical token represents the entire Main Squad.
+## Logical movement remains independent of the rendered projection.
+
+const GridProjectionData = preload(
+	"res://scripts/systems/tactical_grid_projection.gd"
+)
 
 signal cell_changed(previous_cell: Vector2i, new_cell: Vector2i)
-@warning_ignore("unused_signal")
 signal movement_requested(direction: Vector2i)
 
 var squad: Squad
@@ -15,6 +17,7 @@ var cell: Vector2i
 var _grid: TacticalGrid
 var _grid_origin: Vector2
 var _cell_size: float
+var _projection: GridProjectionData
 var _input_enabled: bool = true
 
 
@@ -23,11 +26,13 @@ func configure(
 	grid_origin: Vector2,
 	cell_size: float,
 	start_cell: Vector2i,
-	assigned_squad: Squad
+	assigned_squad: Squad,
+	projection: GridProjectionData = null
 ) -> void:
 	_grid = grid
 	_grid_origin = grid_origin
 	_cell_size = cell_size
+	_projection = projection
 	cell = start_cell
 	squad = assigned_squad
 
@@ -72,6 +77,7 @@ func get_walkable_neighbor_cells(
 
 	return walkable_neighbors
 
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not _input_enabled:
 		return
@@ -104,7 +110,10 @@ func move_to(target_cell: Vector2i) -> bool:
 
 
 func get_cell_center(target_cell: Vector2i) -> Vector2:
-	var cell_offset: Vector2 = Vector2(target_cell.x, target_cell.y) * _cell_size
+	if _projection != null:
+		return _projection.get_cell_center(target_cell)
+
+	var cell_offset: Vector2 = Vector2(target_cell) * _cell_size
 
 	return _grid_origin + cell_offset + Vector2.ONE * (_cell_size * 0.5)
 
