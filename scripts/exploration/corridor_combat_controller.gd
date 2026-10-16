@@ -11,7 +11,7 @@ const CursorScript = preload(
     "res://scripts/exploration/projected_cursor.gd"
 )
 const TurnsScript = preload(
-    "res://scripts/exploration/corridor_turn_controller.gd"
+    "res://scripts/systems/tactical_turn_controller.gd"
 )
 const EncounterControllerScript = preload(
     "res://scripts/systems/tactical_encounter_controller.gd"
