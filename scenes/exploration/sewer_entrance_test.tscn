@@ -1,17 +1,24 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://dfdwp6nr3d5o3"]
 
-[ext_resource type="Script" path="res://scripts/exploration/sewer_entrance_test.gd" id="1_test"]
-[ext_resource type="Texture2D" path="res://assets/backgrounds/sewer_entrance.png" id="2_background"]
-[ext_resource type="Script" path="res://scripts/systems/tactical_player.gd" id="3_player"]
+[ext_resource type="Script" uid="uid://b08i0mge7t3ai" path="res://scripts/exploration/sewer_entrance_test.gd" id="1_test"]
+[ext_resource type="Resource" path="res://assets/calibration/sewer_entrance_2026-10-16T21-23-17.tres" id="2_2ulkw"]
+[ext_resource type="Texture2D" uid="uid://buk0kkmatbs74" path="res://assets/backgrounds/sewer_entrance.png" id="2_background"]
+[ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="3_player"]
 
-[node name="SewerEntranceTest" type="Node2D"]
+[node name="SewerEntranceTest" type="Node2D" unique_id=1754298389]
 script = ExtResource("1_test")
+grid_size = Vector2i(8, 6)
+start_cell = Vector2i(3, 3)
+grid_origin = Vector2(832.789, 238.005)
+grid_axis_x = Vector2(81.462, 43.93)
+grid_axis_y = Vector2(-58.821, 58.264)
+grid_calibration = ExtResource("2_2ulkw")
 
-[node name="Background" type="Sprite2D" parent="."]
+[node name="Background" type="Sprite2D" parent="." unique_id=861600037]
 z_index = -10
 texture = ExtResource("2_background")
 centered = false
 
-[node name="PlayerMarker" type="Node2D" parent="."]
+[node name="PlayerMarker" type="Node2D" parent="." unique_id=2087189147]
 z_index = 10
 script = ExtResource("3_player")
