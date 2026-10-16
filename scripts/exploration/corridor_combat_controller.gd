@@ -250,9 +250,27 @@ func _on_attack_selected(target: TacticalEnemy) -> void:
 	_strategy_open = true
 	strategy_prompt.open_for_squad(player.squad)
 
-
 func _on_strategy_selected(strategy_id: StringName) -> void:
+	print("[Encounter] 1: strategy confirmed: ", strategy_id)
+
 	_strategy_open = false
+
+	if player == null or player.squad == null:
+		push_error("[Encounter] Main Squad reference is missing.")
+		return
+
+	if rats == null or rats.squad == null:
+		push_error("[Encounter] Enemy Squad reference is missing.")
+		return
+
+	print(
+		"[Encounter] 2: shared squads available: ",
+		player.squad.display_name,
+		" versus ",
+		rats.squad.display_name,
+		" | enemy members: ",
+		rats.squad.members.size()
+	)
 
 	active_encounter = EncounterContext.new(
 		player.squad,
@@ -261,8 +279,15 @@ func _on_strategy_selected(strategy_id: StringName) -> void:
 		strategy_id
 	)
 
+	print("[Encounter] 3: EncounterContext created.")
+
 	set_suspended(true)
 	map_root.call("set_combat_presentation_active", true)
+
+	print(
+		"[Encounter] 4: requesting battle presentation: ",
+		BATTLE_SCENE_PATH
+	)
 
 	var presentation: Node = SceneManager.present_game_scene(
 		BATTLE_SCENE_PATH,
@@ -274,8 +299,33 @@ func _on_strategy_selected(strategy_id: StringName) -> void:
 		map_root.call("set_combat_presentation_active", false)
 		set_suspended(false)
 		turns.resume_after_player_action()
-		push_error("Corridor could not load the battle presentation.")
 
+		push_error(
+            "[Encounter] Battle presentation returned null. "
+			+ "Check the preceding Godot errors."
+		)
+		return
+
+	print(
+		"[Encounter] 5: presentation returned: ",
+		presentation.get_path()
+	)
+
+	if presentation is BattleScene:
+		var battle := presentation as BattleScene
+
+		print(
+			"[Encounter] 6: BattleScene received our context: ",
+			battle.encounter_context == active_encounter,
+			" | BattleSession exists: ",
+			battle.battle_session != null,
+			" | visible in tree: ",
+			battle.is_visible_in_tree()
+		)
+	else:
+		push_error(
+            "[Encounter] Loaded node is not a BattleScene."
+		)
 
 func finish_battle(context: Variant) -> void:
 	if active_encounter == null or context != active_encounter:
