@@ -1,20 +1,22 @@
 extends "res://scripts/exploration/sewer_corridor_test.gd"
 
+## Corridor content and composition.
+## TacticalMapRuntime owns turns/encounters.
+## ExplorationExitController owns exit input and menu UI.
+
 const MapRuntimeScript = preload(
-    "res://scripts/systems/tactical_map_runtime.gd"
+	"res://scripts/systems/tactical_map_runtime.gd"
+)
+const ExitControllerScript = preload(
+	"res://scripts/exploration/exploration_exit_controller.gd"
 )
 const SewerEnemyContent = preload(
-    "res://scripts/content/sewer_enemy_content.gd"
+	"res://scripts/content/sewer_enemy_content.gd"
 )
 
 const MAINTENANCE_SCENE_PATH: String = (
-    "res://scenes/exploration/sewer_maintenance_test.tscn"
+	"res://scenes/exploration/sewer_maintenance_test.tscn"
 )
-
-enum Destination {
-	ENTRANCE,
-	MAINTENANCE
-}
 
 @export var maintenance_cells: Array[Vector2i] = [
 	Vector2i(11, 0)
@@ -22,18 +24,29 @@ enum Destination {
 
 @export var rat_start_cell: Vector2i = Vector2i(11, 3)
 
-var _selected_destination: Destination = Destination.ENTRANCE
+var _runtime: MapRuntimeScript
+var _exits: ExitControllerScript
+var _runtime_status: Label
+
+var _exit_interaction_active: bool = false
 var _maintenance_active: bool = false
 var _combat_presentation_active: bool = false
-var _runtime: MapRuntimeScript
 
 
 func _ready() -> void:
 	super._ready()
 
-	if tactical_grid == null or player_marker.squad == null:
+	if (
+		tactical_grid == null
+		or projection == null
+		or player_marker.squad == null
+	):
 		return
 
+	_build_runtime_status()
+
+	# The inherited calibration map connects direct movement.
+	# Disconnect it before giving movement ownership to the turncontroller.
 	if player_marker.movement_requested.is_connected(
 		_on_movement_requested
 	):
@@ -52,31 +65,29 @@ func _ready() -> void:
 		)
 	]
 
-	var configured: bool = runtime.configure(
+	if not runtime.configure(
 		self,
 		player_marker,
 		tactical_grid,
 		projection,
 		"sewer_corridor",
 		spawns
-	)
-
-	if not configured:
+	):
 		runtime.queue_free()
 		player_marker.set_input_enabled(false)
-		_exit_hint.text = (
-            "Tactical map configureren mislukt. Controleer Output."
+		_runtime_status.text = (
+			"Tactical map configureren mislukt. Controleer Output."
 		)
 		return
 
 	_runtime = runtime
-
-	_runtime.status_changed.connect(_update_exit_hint)
+	_runtime.status_changed.connect(_update_runtime_status)
 	_runtime.presentation_active_changed.connect(
 		set_combat_presentation_active
 	)
 
-	_update_exit_hint()
+	_configure_exits()
+	_update_runtime_status()
 
 
 func _on_movement_requested(_direction: Vector2i) -> void:
@@ -84,156 +95,154 @@ func _on_movement_requested(_direction: Vector2i) -> void:
 	pass
 
 
-func _update_exit_hint() -> void:
-	if _exit_hint == null:
-		return
+func _build_runtime_status() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 11
+	add_child(layer)
 
+	_runtime_status = Label.new()
+	_runtime_status.position = Vector2(24.0, 930.0)
+	_runtime_status.add_theme_font_size_override("font_size", 24)
+	_runtime_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_runtime_status)
+
+
+func _configure_exits() -> void:
+	var definitions: Array[ExplorationExitData] = [
+		ExplorationExitData.create(
+			&"to_entrance",
+			"Terug naar de entrance",
+			entrance_cells,
+			ENTRANCE_SCENE_PATH
+		),
+		ExplorationExitData.create(
+			&"to_maintenance",
+			"Naar de maintenance room",
+			maintenance_cells,
+			MAINTENANCE_SCENE_PATH
+		)
+	]
+
+	_exits = ExitControllerScript.new()
+	add_child(_exits)
+
+	_exits.interaction_active_changed.connect(
+		_on_exit_interaction_active_changed
+	)
+	_exits.travel_requested.connect(_on_exit_travel_requested)
+
+	if not _exits.configure(
+		player_marker,
+		definitions,
+		_can_interact_with_exit
+	):
+		_exits.queue_free()
+		_exits = null
+		push_error("Corridor exit configuration failed.")
+
+
+func _can_interact_with_exit() -> bool:
+	if (
+		_runtime == null
+		or _calibrating
+		or _maintenance_active
+		or _combat_presentation_active
+	):
+		return false
+
+	return _runtime.can_open_door()
+
+
+func _on_exit_interaction_active_changed(active: bool) -> void:
+	_exit_interaction_active = active
+	_apply_runtime_suspension()
+	_update_runtime_status()
+
+
+func _apply_runtime_suspension() -> void:
 	if _runtime == null:
-		super._update_exit_hint()
 		return
 
-	if _runtime.can_open_door():
-		if maintenance_cells.has(player_marker.cell):
-			_exit_hint.text = (
-                "Naar de maintenance room"
-				+ "  —  Enter / Spatie: opties"
-			)
-			return
+	_runtime.set_suspended(
+		_calibrating
+		or _exit_interaction_active
+		or _maintenance_active
+		or _combat_presentation_active
+	)
 
-		if entrance_cells.has(player_marker.cell):
-			_exit_hint.text = (
-                "Terug naar de entrance"
-				+ "  —  Enter / Spatie: opties"
-			)
-			return
 
-	_exit_hint.text = _runtime.get_status_text()
+func _update_runtime_status() -> void:
+	if _runtime_status == null or _runtime == null:
+		return
+
+	_runtime_status.text = _runtime.get_status_text()
+
+
+func _process(delta: float) -> void:
+	super._process(delta)
+
+	if _runtime_status != null and _runtime != null:
+		_runtime_status.visible = (
+			not _calibrating
+			and not _exit_interaction_active
+			and not _maintenance_active
+			and not _combat_presentation_active
+		)
 
 
 func _input(event: InputEvent) -> void:
-	if _exit_hint == null or _transitioning or _runtime == null:
-		return
-
+	# ExitController handles Enter/Space and the menu.
+	# This adapter only protects the inherited calibration flow.
 	if not event is InputEventKey:
 		return
 
 	var key_event := event as InputEventKey
 
-	if not key_event.pressed:
+	if not key_event.pressed or key_event.keycode != KEY_F2:
 		return
 
-	if key_event.echo:
-		if _exit_menu_open:
-			get_viewport().set_input_as_handled()
-		return
-
-	if _exit_menu_open:
-		_handle_exit_menu_key(key_event.keycode)
+	if (
+		_runtime == null
+		or _exit_interaction_active
+		or _maintenance_active
+		or _combat_presentation_active
+	):
 		get_viewport().set_input_as_handled()
 		return
 
-	if _calibrating:
-		return
-
-	if key_event.keycode == KEY_F2:
-		if not _runtime.can_calibrate():
-			get_viewport().set_input_as_handled()
-		return
-
-	if not _is_confirm_key(key_event.keycode):
-		return
-
-	if not _runtime.can_open_door():
-		return
-
-	if maintenance_cells.has(player_marker.cell):
-		_selected_destination = Destination.MAINTENANCE
-	elif entrance_cells.has(player_marker.cell):
-		_selected_destination = Destination.ENTRANCE
-	else:
-		return
-
-	_runtime.set_suspended(true)
-	_open_exit_menu()
-	get_viewport().set_input_as_handled()
+	if not _runtime.can_calibrate():
+		get_viewport().set_input_as_handled()
 
 
-func _refresh_exit_menu() -> void:
-	var destination_label: String = (
-        "Naar de maintenance room"
-		if _selected_destination == Destination.MAINTENANCE
-		else "Terug naar de entrance"
-	)
-
-	var travel_prefix: String = (
-		"> " if _exit_selection == 0 else "  "
-	)
-
-	var cancel_prefix: String = (
-		"> " if _exit_selection == 1 else "  "
-	)
-
-	_exit_menu_text.text = (
-        "INGANG\n\n"
-		+ travel_prefix
-		+ destination_label
-		+ "\n"
-		+ cancel_prefix
-		+ "Annuleren"
-		+ "\n\nW/S of pijltjes: kiezen"
-		+ "\nEnter / Spatie: bevestigen"
-		+ "\nEscape: sluiten"
-	)
-
-
-func _handle_exit_menu_key(keycode: int) -> void:
-	if keycode == KEY_ESCAPE:
-		_close_exit_menu()
-		return
-
-	if keycode in [KEY_W, KEY_UP, KEY_S, KEY_DOWN]:
-		_exit_selection = 1 - _exit_selection
-		_refresh_exit_menu()
-		return
-
-	if not _is_confirm_key(keycode):
-		return
-
-	if _exit_selection == 1:
-		_close_exit_menu()
-		return
-
-	_exit_menu_open = false
-	_exit_overlay.hide()
-	_transitioning = true
-
-	call_deferred("_travel_to_selected_destination")
-
-
-func _close_exit_menu() -> void:
-	_exit_menu_open = false
-	_exit_overlay.hide()
-
-	_runtime.set_suspended(false)
-	_update_exit_hint()
-
-
-func _travel_to_selected_destination() -> void:
+func _on_exit_travel_requested(
+	exit_data: ExplorationExitData,
+	_departure_cell: Vector2i
+) -> void:
 	_runtime.save_room_state()
 
-	if _selected_destination == Destination.ENTRANCE:
-		_return_to_entrance()
-		return
+	match exit_data.exit_id:
+		&"to_entrance":
+			_return_to_entrance()
 
+		&"to_maintenance":
+			_present_maintenance()
+
+		_:
+			_recover_from_return_error(
+				"Onbekende corridor-uitgang: " + str(exit_data.exit_id)
+			)
+
+
+func _present_maintenance() -> void:
 	if SceneManager.get_current_game_scene() != self:
 		_recover_from_return_error(
-            "Gebruik F5 en betreed de corridor vanuit de entrance."
+			"Gebruik F5 en betreed de corridor vanuit de entrance."
 		)
 		return
 
-	_runtime.set_suspended(true)
-	set_process_unhandled_input(false)
 	_maintenance_active = true
+	_apply_runtime_suspension()
+	set_process_unhandled_input(false)
 
 	var maintenance: Node = SceneManager.present_game_scene(
 		MAINTENANCE_SCENE_PATH
@@ -244,24 +253,25 @@ func _travel_to_selected_destination() -> void:
 		set_process_unhandled_input(true)
 
 		_recover_from_return_error(
-            "Maintenance laden mislukt. Controleer Output."
+			"Maintenance laden mislukt. Controleer Output."
 		)
 
 
 func _recover_from_return_error(message: String) -> void:
-	_transitioning = false
+	if _exits != null:
+		_exits.recover_from_transition_error(message)
+	else:
+		_exit_interaction_active = false
+		_apply_runtime_suspension()
+		push_warning(message)
 
-	if _runtime != null:
-		_runtime.set_suspended(false)
-
-	_exit_hint.text = message
-	push_warning(message)
+	_update_runtime_status()
 
 
 func set_combat_presentation_active(active: bool) -> void:
 	_combat_presentation_active = active
-	_transitioning = active
 	set_process_unhandled_input(not active)
+	_apply_runtime_suspension()
 
 
 func on_game_presentation_finished(context: Variant) -> void:
@@ -275,16 +285,22 @@ func on_game_presentation_finished(context: Variant) -> void:
 
 	if not _maintenance_active:
 		push_warning(
-            "Corridor received an unexpected presentation result."
+			"Corridor received an unexpected presentation result."
 		)
 		return
 
 	_maintenance_active = false
-	_transitioning = false
-
 	set_process_unhandled_input(true)
-	_runtime.set_suspended(false)
-	_update_exit_hint()
+
+	# Clearing the controller's pending request emits the release signal.
+	# That signal releases only the exit lock, without starting a new turn.
+	if _exits != null:
+		_exits.complete_transition()
+	else:
+		_exit_interaction_active = false
+		_apply_runtime_suspension()
+
+	_update_runtime_status()
 
 	print(
 		"Returned from maintenance to the same corridor cell: ",
@@ -293,20 +309,24 @@ func on_game_presentation_finished(context: Variant) -> void:
 
 
 func _begin_calibration() -> void:
-	if _runtime != null and not _runtime.can_calibrate():
+	if (
+		_runtime == null
+		or _exit_interaction_active
+		or _maintenance_active
+		or _combat_presentation_active
+	):
+		return
+
+	if not _runtime.can_calibrate():
 		return
 
 	super._begin_calibration()
-
-	if _runtime != null:
-		_runtime.set_suspended(true)
+	_apply_runtime_suspension()
 
 
 func _finish_calibration() -> void:
 	super._finish_calibration()
-
-	if _runtime != null:
-		_runtime.set_suspended(false)
+	_apply_runtime_suspension()
 
 
 func _refresh_projection_visuals() -> void:

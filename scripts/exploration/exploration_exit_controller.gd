@@ -294,3 +294,16 @@ func recover_from_transition_error(message: String) -> void:
 	_refresh_hint()
 
 	push_warning(message)
+
+func complete_transition() -> void:
+	# The host retained this map during a temporary excursion.
+	# Clear the pending request before releasing its movement lock.
+	_transition_pending = false
+	_menu_open = false
+	_selected_exit = null
+	_error_message = ""
+
+	_overlay.hide()
+
+	interaction_active_changed.emit(false)
+	_refresh_hint()
