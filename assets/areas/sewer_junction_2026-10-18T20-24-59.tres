@@ -1,0 +1,182 @@
+[gd_resource type="Resource" script_class="ExplorationAreaData" format=3]
+
+[ext_resource type="Script" path="res://scripts/domain/exploration_area_data.gd" id="1_fxkje"]
+
+[resource]
+script = ExtResource("1_fxkje")
+background_path = "res://assets/backgrounds/sewer_junction.png"
+default_terrain = &"FLOOR"
+default_walkable = true
+cells = {
+"0,5": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"0,7": {
+"content_id": "",
+"tags": PackedStringArray("EXIT"),
+"terrain": "FLOOR",
+"walkable": true
+},
+"1,0": {
+"content_id": "",
+"tags": PackedStringArray("TRERASURE"),
+"terrain": "FLOOR",
+"walkable": false
+},
+"1,5": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,0": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,1": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,3": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,4": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,5": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,6": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,7": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"10,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"11,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"12,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"13,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"14,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"15,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"16,7": {
+"content_id": "",
+"tags": PackedStringArray("TREASURE"),
+"terrain": "FLOOR",
+"walkable": false
+},
+"16,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"3,0": {
+"content_id": "",
+"tags": PackedStringArray("EXIT"),
+"terrain": "FLOOR",
+"walkable": true
+},
+"9,0": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,1": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,3": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,4": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,5": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,6": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,7": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+},
+"9,8": {
+"content_id": "",
+"tags": PackedStringArray(),
+"terrain": "FLOOR",
+"walkable": false
+}
+}
+origin = Vector2(1478.0953, 481.2549)
+axis_x = Vector2(93.84729, 51.482365)
+axis_y = Vector2(-71.252205, 67.07637)

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ExplorationAreaData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/domain/exploration_area_data.gd" id="1_area"]
+
+[resource]
+script = ExtResource("1_area")
+origin = Vector2(1478.0953, 481.2549)
+axis_x = Vector2(93.84729, 51.482365)
+axis_y = Vector2(-71.252205, 67.07637)
+grid_size = Vector2i(17, 9)
+background_path = "res://assets/backgrounds/sewer_junction.png"
+default_terrain = &"FLOOR"
+default_walkable = true
+cells = {}

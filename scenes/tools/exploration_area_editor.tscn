@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://bcfbnjsbnbs8r"]
+
+[ext_resource type="Script" uid="uid://y8v88c7jpf2g" path="res://scripts/tools/exploration_area_editor.gd" id="1_editor"]
+
+[node name="ExplorationAreaEditor" type="Node2D" unique_id=1654808189]
+script = ExtResource("1_editor")
+source_area = "res://assets/areas/sewer_junction_2026-10-18T20-24-59.tres"
