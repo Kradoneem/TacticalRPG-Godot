@@ -1,7 +1,6 @@
 extends Node
 
-## Entrance-specific content and transition adapter.
-## Shared UI and input live in ExplorationExitController.
+## Entrance connection content and movement-lock adapter.
 
 const ExitControllerScript = preload(
 	"res://scripts/exploration/exploration_exit_controller.gd"
@@ -34,7 +33,6 @@ var _interaction_active: bool = false
 
 
 func _ready() -> void:
-	# Child _ready runs before the parent configures its player/grid.
 	call_deferred("_initialize_exits")
 
 
@@ -43,21 +41,20 @@ func _initialize_exits() -> void:
 		push_error("Entrance exits require a configured Main Squad.")
 		return
 
-	GameState.current_location = "Sewer Entrance"
-	GameState.in_city = false
-
-	var exit_definitions: Array[ExplorationExitData] = [
+	var definitions: Array[ExplorationExitData] = [
 		ExplorationExitData.create(
 			&"to_city",
 			"Terug naar de stad",
 			city_cells,
-			CITY_SCENE_PATH
+			CITY_SCENE_PATH,
+			Vector2i.ZERO
 		),
 		ExplorationExitData.create(
 			&"to_corridor",
 			"Door naar de corridor",
 			corridor_cells,
-			CORRIDOR_SCENE_PATH
+			CORRIDOR_SCENE_PATH,
+			Vector2i(0, 1)
 		)
 	]
 
@@ -69,11 +66,7 @@ func _initialize_exits() -> void:
 	)
 	_exits.travel_requested.connect(_on_travel_requested)
 
-	if not _exits.configure(
-		player_marker,
-		exit_definitions,
-		_can_interact
-	):
+	if not _exits.configure(player_marker, definitions, _can_interact):
 		_exits.queue_free()
 		_exits = null
 		push_error("Entrance exit configuration failed.")
@@ -89,14 +82,10 @@ func _can_interact() -> bool:
 
 func _on_interaction_active_changed(active: bool) -> void:
 	_interaction_active = active
-
-	player_marker.set_input_enabled(
-		not active and _can_interact()
-	)
+	player_marker.set_input_enabled(not active and _can_interact())
 
 
 func _input(event: InputEvent) -> void:
-	# Prevent the inherited calibration flow from starting under the menu.
 	if not _interaction_active:
 		return
 
@@ -111,44 +100,16 @@ func _on_travel_requested(
 	exit_data: ExplorationExitData,
 	departure_cell: Vector2i
 ) -> void:
-	if SceneManager.get_current_game_scene() != entrance:
-		_exits.recover_from_transition_error(
-			"Start met F5 om kamerwissels te testen; F6 mist Main."
-		)
-		return
-
-	# Validate the existing destination contract before replacing this map.
-	var packed_scene: PackedScene = (
-		load(exit_data.destination_scene) as PackedScene
-	)
-
-	if packed_scene == null:
-		_exits.recover_from_transition_error(
-			"Bestemming laden mislukt. Controleer Output."
-		)
-		return
-
-	var destination_probe: Node = packed_scene.instantiate()
-	var supports_return: bool = (
-		destination_probe.has_method("configure_return")
-	)
-	destination_probe.free()
-
-	if not supports_return:
-		_exits.recover_from_transition_error(
-			"Bestemming mist configure_return(). Controleer het mapscript."
-		)
-		return
-
-	var destination: Node = SceneManager.change_game_scene(
-		exit_data.destination_scene
+	var destination: Node = SceneManager.travel_exploration(
+		entrance, exit_data, departure_cell
 	)
 
 	if destination == null:
 		_exits.recover_from_transition_error(
-			"Kamerwissel mislukt. Controleer Output."
+			"Kamerwissel mislukt. Gebruik F5 en controleer Output."
 		)
-		return
 
-	# Keep the current arrival/return contract unchanged in this step.
-	destination.call("configure_return", departure_cell)
+
+func resume_exploration() -> void:
+	if _exits != null:
+		_exits.complete_transition()

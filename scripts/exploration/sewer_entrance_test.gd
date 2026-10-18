@@ -484,3 +484,49 @@ func _draw() -> void:
 			22,
 			colors[index]
 		)
+
+func prepare_exploration_entry(
+	context: ExplorationEntryContext
+) -> bool:
+	if context == null or context.main_squad == null:
+		push_error("Exploration entry requires an existing Main Squad.")
+		return false
+
+	var arrival: Vector2i = context.arrival_cell
+
+	if (
+		arrival.x < 0
+		or arrival.y < 0
+		or arrival.x >= grid_size.x
+		or arrival.y >= grid_size.y
+	):
+		push_error("Arrival cell is outside the destination grid: " + str(arrival))
+		return false
+
+	if is_node_ready():
+		if player_marker.squad != context.main_squad:
+			push_error("Retained map has a different Main Squad.")
+			return false
+
+		# Existing maps return through their remembered departure cell.
+		# Reject unexpected repositioning rather than corrupting tactical turns.
+		if player_marker.cell != arrival:
+			push_error("Retained map arrival differs from its departure cell.")
+			return false
+	else:
+		# Configure logical arrival BEFORE _ready builds tokens and runtime.
+		start_cell = arrival
+
+	return true
+
+
+func on_exploration_entered(
+	_context: ExplorationEntryContext
+) -> void:
+	GameState.current_location = "Sewer Entrance"
+	GameState.in_city = false
+
+	var exit_adapter: Node = get_node_or_null("ExitInteractions")
+
+	if exit_adapter != null and exit_adapter.has_method("resume_exploration"):
+		exit_adapter.call("resume_exploration")
