@@ -1,3 +1,41 @@
+# Actuele exploration-status — 18 oktober 2026
+
+Dit blok heeft voorrang op verouderde statusclaims hieronder.
+Controleer altijd de actuele Git HEAD.
+
+## Afgerond en getest
+
+IJkpunt: 3e3ca27 — exploration entry context and retained map transitions.
+
+- Entrance, corridor en maintenance gebruiken gedeelde exitinteractie.
+- ExplorationEntryContext bevat vertrek, aankomst en dezelfde Main Squad.
+- SceneManager bewaart verlaten mapinstances buiten de scene tree.
+- Terugkeer hergebruikt dezelfde mapinstance en tactical runtime.
+- exploration_map.gd bevat de gedeelde gameplaykoppeling.
+- Maintenance is een reguliere exploration-map.
+- Battle blijft een tijdelijke presentation van de actieve map.
+
+## Grenzen
+
+- Mapcache is gamesessie-state, geen disk-save/load.
+- Meerdere verbindingen tussen dezelfde maps zijn niet gevalideerd.
+- Bewaarde maps accepteren alleen hun bestaande vertrekcel.
+- Een begrensd cache-ontlaadbeleid ontbreekt nog.
+
+## Volgende milestone
+
+Grote sewer-junction-testmap:
+achtergrond op ware schaal → camera en scrolling → gridkalibratie →
+walkable zones → mapverbinding → zelfstandige STATIC/PATROL-squads.
+
+Spelvenster blijft 1920 × 1080.
+Uniforme pixels-per-tegel-schaal is nog niet bewezen.
+Geen nieuwe art-polish, combatregels of rewarddata.
+
+---
+
+## Historische context — oude statusclaims hieronder eerst verifiëren
+
 # Persona Patch — Godot Tactical RPG: Handoff oktober 2026
 
 > **Gebruik:** voeg dit document toe aan of vervang conflicterende passages in de bestaande Game Developer Persona.  
