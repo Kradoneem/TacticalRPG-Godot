@@ -1,37 +1,44 @@
 extends Camera2D
 
 ## Camera presentation only.
-## Does not move tokens or change grid coordinates.
-## Bounds are expressed in this camera parent's local coordinates.
+## Manual inspection ends after a real target-cell change.
+## Calibration never automatically recenters the camera.
+
+@export_range(0.0, 20.0, 0.5) var follow_speed: float = 8.0
 
 var _bounds: Rect2
-var _target: Node2D
+var _target: TacticalPlayer
 var _calibration_check: Callable
 var _configured: bool = false
-var _following: bool = false
+var _following: bool = true
 var _dragging: bool = false
 
 
 func configure(
 	assigned_bounds: Rect2,
-	assigned_target: Node2D,
+	assigned_target: TacticalPlayer,
 	assigned_calibration_check: Callable
 ) -> void:
+	if is_instance_valid(_target):
+		if _target.cell_changed.is_connected(_on_target_cell_changed):
+			_target.cell_changed.disconnect(_on_target_cell_changed)
+
 	_bounds = assigned_bounds
 	_target = assigned_target
 	_calibration_check = assigned_calibration_check
 
-	# One map pixel per viewport unit.
-	# Actual monitor pixels also depend on window stretching.
 	zoom = Vector2.ONE
 	offset = Vector2.ZERO
 	position_smoothing_enabled = false
 	rotation_smoothing_enabled = false
 
 	_configured = true
-	_following = false
+	_following = true
+	_dragging = false
 
-	position = _bounds.get_center()
+	_target.cell_changed.connect(_on_target_cell_changed)
+
+	position = _target.position
 	_clamp_position()
 	make_current()
 
@@ -43,7 +50,19 @@ func _is_calibrating() -> bool:
 	)
 
 
-func _process(_delta: float) -> void:
+func _on_target_cell_changed(
+	previous_cell: Vector2i,
+	new_cell: Vector2i
+) -> void:
+	if previous_cell == new_cell or _is_calibrating():
+		return
+
+	# Actual movement, not a blocked WASD attempt, resumes following.
+	_dragging = false
+	_following = true
+
+
+func _process(delta: float) -> void:
 	if not _configured:
 		return
 
@@ -52,10 +71,15 @@ func _process(_delta: float) -> void:
 
 	if (
 		_following
+		and not _dragging
 		and not _is_calibrating()
 		and is_instance_valid(_target)
 	):
-		position = _target.position
+		if follow_speed <= 0.0:
+			position = _target.position
+		else:
+			var weight: float = 1.0 - exp(-follow_speed * delta)
+			position = position.lerp(_target.position, weight)
 
 	_clamp_position()
 
@@ -77,16 +101,10 @@ func _input(event: InputEvent) -> void:
 			return
 
 	if event is InputEventMouseMotion and _dragging:
-		var previous_screen_point: Vector2 = (
-			get_viewport().get_mouse_position()
-			- (event as InputEventMouseMotion).relative
-		)
-		var current_screen_point: Vector2 = (
-			get_viewport().get_mouse_position()
-		)
+		var motion := event as InputEventMouseMotion
+		var current_point: Vector2 = get_viewport().get_mouse_position()
+		var previous_point: Vector2 = current_point - motion.relative
 
-		# Convert viewport movement into map-local movement.
-		# This also respects canvas stretching.
 		var screen_to_map: Transform2D = (
 			(get_parent() as Node2D)
 			.get_global_transform_with_canvas()
@@ -94,8 +112,8 @@ func _input(event: InputEvent) -> void:
 		)
 
 		position += (
-			screen_to_map * previous_screen_point
-			- screen_to_map * current_screen_point
+			screen_to_map * previous_point
+			- screen_to_map * current_point
 		)
 
 		_clamp_position()
@@ -124,19 +142,14 @@ func focus_target() -> void:
 	if not is_instance_valid(_target):
 		return
 
+	_dragging = false
+	_following = true
 	position = _target.position
-
-	# During calibration, Home only centers once.
-	# Camera following must not interfere with floor-point selection.
-	_following = not _is_calibrating()
-
 	_clamp_position()
 
 
 func _clamp_position() -> void:
-	var half_view: Vector2 = (
-		get_viewport_rect().size / zoom * 0.5
-	)
+	var half_view: Vector2 = get_viewport_rect().size / zoom * 0.5
 
 	position.x = _clamp_axis(
 		position.x,

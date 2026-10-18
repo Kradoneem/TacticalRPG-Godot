@@ -37,12 +37,11 @@ var _y_steps: SpinBox
 var _save_button: Button
 var _hint: Label
 
-
 func _ready() -> void:
 	player_marker.set_input_enabled(false)
 
 	if grid_size.x <= 0 or grid_size.y <= 0:
-		push_error("Entrance test requires a positive grid size.")
+		push_error("Exploration map requires a positive grid size.")
 		return
 
 	projection = GridProjectionData.new()
@@ -57,13 +56,19 @@ func _ready() -> void:
 		projection.axis_y = grid_axis_y
 
 	if not _axes_are_valid(projection.axis_x, projection.axis_y):
-		push_error("Entrance grid axes must not be parallel or zero.")
+		push_error("Grid axes must not be parallel or zero.")
 		return
 
 	tactical_grid = TacticalGrid.new(grid_size)
 
+	# Content subclasses configure floor rules before token initialization.
+	_configure_tactical_grid()
+
 	if not tactical_grid.is_walkable(start_cell):
-		push_error("Entrance start cell is outside the walkable test zone.")
+		push_error(
+			"Start cell is not on walkable floor: " + str(start_cell)
+		)
+		tactical_grid = null
 		return
 
 	# F6 skips main.gd. Never reset an existing game or copy its units.
@@ -73,7 +78,8 @@ func _ready() -> void:
 	var main_squad: Squad = GameState.get_main_squad()
 
 	if main_squad == null:
-		push_error("Entrance test could not find a Main Squad.")
+		push_error("Exploration map could not find a Main Squad.")
+		tactical_grid = null
 		return
 
 	player_marker.configure(
@@ -91,6 +97,10 @@ func _ready() -> void:
 	player_marker.set_input_enabled(true)
 	queue_redraw()
 
+func _configure_tactical_grid() -> void:
+	# Default: retain the existing rectangular test grid.
+	# Content maps can override this to configure walkable floor.
+	pass
 
 func _axes_are_valid(axis_x: Vector2, axis_y: Vector2) -> bool:
 	if axis_x.length() < 1.0 or axis_y.length() < 1.0:
