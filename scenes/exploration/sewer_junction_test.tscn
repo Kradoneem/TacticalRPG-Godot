@@ -1,0 +1,28 @@
+[gd_scene format=3 uid="uid://bsslucqj0vjjx"]
+
+[ext_resource type="Script" uid="uid://257adcjr5ttt" path="res://scripts/exploration/sewer_junction_test.gd" id="1_map"]
+[ext_resource type="Texture2D" uid="uid://byprbgs7n1bu7" path="res://assets/backgrounds/sewer_junction.png" id="2_background"]
+[ext_resource type="Resource" path="res://assets/calibration/sewer_junction_2026-10-18T19-30-53.tres" id="2_qptsj"]
+[ext_resource type="Script" uid="uid://cgi0aq206koxs" path="res://scripts/systems/tactical_player.gd" id="3_player"]
+[ext_resource type="Script" uid="uid://cnqoh86ed8jni" path="res://scripts/exploration/exploration_camera.gd" id="4_camera"]
+
+[node name="SewerJunctionTest" type="Node2D" unique_id=991086871]
+script = ExtResource("1_map")
+grid_size = Vector2i(17, 9)
+start_cell = Vector2i(2, 2)
+grid_origin = Vector2(1920, 700)
+grid_axis_x = Vector2(100, 55)
+grid_axis_y = Vector2(-100, 55)
+grid_calibration = ExtResource("2_qptsj")
+
+[node name="Background" type="Sprite2D" parent="." unique_id=1552855353]
+z_index = -10
+texture = ExtResource("2_background")
+centered = false
+
+[node name="PlayerMarker" type="Node2D" parent="." unique_id=468850748]
+z_index = 10
+script = ExtResource("3_player")
+
+[node name="MapCamera" type="Camera2D" parent="." unique_id=2094442483]
+script = ExtResource("4_camera")
