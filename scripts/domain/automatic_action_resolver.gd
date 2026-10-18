@@ -1,5 +1,4 @@
 class_name AutomaticActionResolver
-
 extends RefCounted
 
 const CombatResolverData = preload(
@@ -27,7 +26,9 @@ static func try_resolve_support_action(
 	if not acting_unit.is_alive():
 		return result
 
-	var heal_target: Unit = owning_squad.get_most_wounded_living_member()
+	var heal_target: Unit = (
+		owning_squad.get_most_wounded_living_member()
+	)
 
 	if heal_target == null:
 		return result
