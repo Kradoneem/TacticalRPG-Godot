@@ -1,38 +1,111 @@
-# Actuele exploration-status — 18 oktober 2026
+# Actuele projectstatus — 19 oktober 2026
 
-Dit blok heeft voorrang op verouderde statusclaims hieronder.
-Controleer altijd de actuele Git HEAD.
+Dit blok heeft voorrang op alle historische statusclaims en roadmaps hieronder. Historische passages blijven als context behouden, maar zijn geen actuele bouwopdracht. Controleer bij iedere nieuwe sessie eerst de huidige Git HEAD via de GitHub API en lees vervolgens SHA-gepinde bestanden. Recente expliciete gebruikersbesluiten hebben voorrang.
 
-## Afgerond en getest
+## Vastgelegd ijkpunt
 
-IJkpunt: 3e3ca27 — exploration entry context and retained map transitions.
+- Repository: https://github.com/Kradoneem/TacticalRPG-Godot
+- Lokale projectmap: `~/tactical-rpg`
+- Branch: `main`
+- Geteste en gepushte gameplaycommit: `3309293 — feat: centralize party menu and fix status formatting`.
+- Volledige SHA: `33092936ceb20c67e5778c15bca1a7f8a9529167`.
+- Eerdere ijkpunten: `0394d53` — zelfstandige STATIC/PATROL-squads op junction; `87b4245` — battlepresentation isoleren van tactical camera en UI.
+- Dit is een gameplay-ijkpunt, niet noodzakelijk de nieuwste HEAD na een documentatiecommit.
 
-- Entrance, corridor en maintenance gebruiken gedeelde exitinteractie.
-- ExplorationEntryContext bevat vertrek, aankomst en dezelfde Main Squad.
-- SceneManager bewaart verlaten mapinstances buiten de scene tree.
-- Terugkeer hergebruikt dezelfde mapinstance en tactical runtime.
-- exploration_map.gd bevat de gedeelde gameplaykoppeling.
-- Maintenance is een reguliere exploration-map.
-- Battle blijft een tijdelijke presentation van de actieve map.
+## Afgeronde exploration/junction-milestone
 
-## Grenzen
+De gebruiker heeft de junction-loop getest en bevestigd:
+
+- Entrance, corridor, maintenance en junction gebruiken de gedeelde exploration-architectuur.
+- De grote junction-placeholder is geïntegreerd als gameplaytestmap met camera/scrolling, gekalibreerde grid, walkable zones en mapverbinding.
+- STATIC en PATROL functioneren als zelfstandige enemy-squad-tokens. Iedere token vertegenwoordigt precies één Squad; squads mergen nooit.
+- Patrols bewegen na een geldige Main Squad-beweging tijdens vrije exploration; geblokkeerde bewegingen tellen niet mee.
+- Tijdens alert bewegen patrols op hun eigen tactical beurt; STATIC blijft staan.
+- Attack bevat uitsluitend de Main Squad en de gekozen adjacent enemy squad. Andere tokens blijven zelfstandig op de tactical map.
+- Battle keert terug naar dezelfde tactical context. HP/MP en individuele defeated-state blijven behouden, ook bij maintenance → junction-terugkeer.
+- De bestaande battle-lifecycle en tactical alert-foundation zijn al geïmplementeerd; stel die niet opnieuw voor als ontbrekende refactor.
+- BattleSession gebruikt een configureerbare `maximum_rounds` via EncounterContext, voorlopig standaard twee volledige rondes. Start- en finishing-hooks skippen veilig zolang loadouts ontbreken.
+
+## Afgeronde battlepresentation-fix
+
+- SceneManager gebruikt een afzonderlijke screen-space CanvasLayer voor tijdelijke battlepresentation.
+- Battle volgt niet de tactical Camera2D.
+- De tactical source-instance blijft behouden; geen kopieën van Squad- of Unit-objecten.
+- Bronzichtbaarheid, bron-CanvasLayers en process-mode worden tijdelijk aangepast en daarna hersteld.
+- Exploration-UI is tijdens battle verborgen; terugkeer is getest.
+
+## Afgeronde centrale Party-milestone
+
+### Verantwoordelijkheden
+
+- `scripts/ui/party_menu.gd`: bestaande interface, schermnavigatie, squad-/unitinspectie en bekende abilities.
+- `scripts/ui/party_menu_controller.gd`: centrale eigenaar en toegangspoort; geen menunavigatie en geen eigen partydata.
+- `scripts/core/main.gd`: maakt één PartyMenuController buiten GameLayer aan, zodat die kamerwisselingen overleeft.
+- SceneManager en actieve scenes leveren toestemming voor openen.
+- PartyMenu leest dezelfde bestaande Squad- en Unit-referenties als gameplay.
+
+### Werkend en getest
+
+- Openen met Escape via Main.
+- Status toont squadselectie, unit level, actuele HP/MP, Attack, Defense, Speed, Wisdom en bekende skills/spells.
+- Het aantal squads en unitstats worden correct geformatteerd. De eerdere zichtbare `%d`-placeholders zijn opgelost door eerst de volledige template samen te stellen en daarna te formatteren.
+- Menunavigatie blijft in PartyMenu via de publieke `handle_menu_input(event)`-functie.
+- PartyMenu verwerkt keyboard-input vóór GUI-afhandeling; de controller roept geen private menufuncties aan.
+- WASD/pijltjes navigeren; Enter/Spatie bevestigt; Escape gaat terug en sluit op het hoofdmenu.
+- De controller zet GameLayer tijdelijk op `PROCESS_MODE_DISABLED` en herstelt de eerder opgeslagen process-mode bij sluiten. Dit is geen globale SceneTree-pauze.
+- Main Squad, patrols en mapinteracties handelen niet op menunavigatie.
+- Het menu werkt op sewer-maps en de stad-placeholder; exit-/terugreisinput lekt niet door.
+
+### Expliciete beschikbaarheidsbeslissing
+
+Party is een algemene gamefunctie, niet een exploration-specifiek menu.
+
+- Normaal beschikbaar op sewer-, stads- en toekomstige locaties.
+- Niet beschikbaar tijdens tactical alert: **alert betekent dat tactical combat is gestart**.
+- Niet beschikbaar tijdens tactical acties, strategy selection en side-view battlepresentation.
+- Niet beschikbaar tijdens actieve dialogue.
+- Tijdelijk geblokkeerd tijdens modal exitinteractie, pending terugreis/transitions en geregistreerde SceneManager-overlays.
+- Na hervatte vrije exploration is Party weer beschikbaar.
+
+Beschikbaarheid van het menu en toestemming voor individuele opties zijn afzonderlijke zaken. Save/load, units toevoegen of tussen squads wisselen kunnen later contextafhankelijke opties worden. Er zijn nog geen nieuwe voorwaarden of systemen voor geïmplementeerd.
+
+### Grenzen
+
+- Equipment, Items en Formation zijn expliciete placeholders; geen itemgebruik, equipment/loadout of squadwisselbeheer geïmplementeerd.
+- `set_blocked(reason, blocked)` is een aansluitpunt voor toekomstige modal systemen zoals dialogue. Er is nog geen dialogue-systeem aangesloten; daadwerkelijke dialogueblokkering is dus nog niet end-to-end gevalideerd.
+- De legacy-testscene `tacticaltest.gd` bevat nog eigen PartyMenu-aansturing. De centrale milestone is getest via Main met de sewer-route. Ruim die legacy-koppeling later gericht op; maak geen tweede centrale controller.
+- Geen `ExplorationPartyMenu` en geen extra Party-Autoload toevoegen.
+
+## Behouden grenzen en backlog
 
 - Mapcache is gamesessie-state, geen disk-save/load.
 - Meerdere verbindingen tussen dezelfde maps zijn niet gevalideerd.
-- Bewaarde maps accepteren alleen hun bestaande vertrekcel.
+- Bewaarde maps accepteren volgens het bestaande entry-contract hun opgeslagen vertrekcel.
 - Een begrensd cache-ontlaadbeleid ontbreekt nog.
+- Spelvenster blijft 1920 × 1080; achtergrondresolutie staat los van viewportresolutie.
+- Uniforme pixels-per-tegel-schaal tussen alle achtergronden is nog niet bewezen. Junction-integratie lost automatische framingverschillen van entrance/corridor niet vanzelf op.
+- De maps blijven gameplay-placeholders. Geen nieuwe art-polish of dynamisch fakkellicht zonder concrete gameplaybehoefte.
+- Items/equipment/loadouts, dialogue/quests/shops, progression, map-clear rewards en save/load zijn nog niet als nieuwe milestones afgerond.
+- Perception, lockpicks en interactieve caches zijn contentwensen, geen geïmplementeerde regels. Ontdekken, openen en loot toekennen blijven afzonderlijke stappen.
+- Geen verzonnen rewarddata, checkformules, verbruik of movement-/initiativeformules voorstellen. Lees bestaande implementaties voordat ontbrekende regels worden aangenomen.
 
-## Volgende milestone
+## Volgende sessie
 
-Grote sewer-junction-testmap:
-achtergrond op ware schaal → camera en scrolling → gridkalibratie →
-walkable zones → mapverbinding → zelfstandige STATIC/PATROL-squads.
+1. Controleer lokale `git status`, laatste commit en relevante diffs. Lees GitHub main-HEAD via API; gebruik daarna SHA-gepinde bronnen.
+2. Gebruik dit blok als actueel ijkpunt. Stel BattleSession-lifecycle, alert-foundation, junction-integratie of een nieuw minimaal PartyMenu niet opnieuw als ontbrekend werk voor.
+3. De volgende gameplay-milestone is nog niet gekozen. Herijk bestaande Python-migratie en noodzakelijke gameplayarchitectuur tegen actuele code en de nieuwste gebruikerskeuze.
+4. Controleer vóór nieuwe code relevante Godot-bestanden en, bij migratie, de overeenkomstige Python-functionaliteit.
+5. Beperk iedere milestone tot één concrete gameplayuitbreiding. Nieuwe ideeën die de milestone doorkruisen gaan op de backlog.
+6. Lever volledige functies of bij grote refactors volledige vervangende bestanden, zonder de overige bestaande inhoud blind te overschrijven.
+7. Na testen: relevante bestanden committen en pushen. Bij `remote: Internal Server Error`: opnieuw `git push origin main`, niet force-pushen.
+8. Na 30 minuten vastlopen hulp vragen met de eerste foutmelding en het betrokken scriptpad.
 
-Spelvenster blijft 1920 × 1080.
-Uniforme pixels-per-tegel-schaal is nog niet bewezen.
-Geen nieuwe art-polish, combatregels of rewarddata.
+## Lokale repositoryhygiëne bij dit ijkpunt
+
+De laatste lokale status bevatte alleen untracked bestanden naast de gepushte gameplaycommit: `art/`, losse kalibratie-exports en een verdacht bestand `tatus --short`. Dit zijn geen automatisch te committen gameplaywijzigingen. Inspecteer het verdachte bestand vóór verwijderen; gebruik geen `git add .` of brede cleanup-opdracht. De huidige lokale status moet bij hervatten opnieuw worden gecontroleerd.
 
 ---
+
 
 ## Historische context — oude statusclaims hieronder eerst verifiëren
 
