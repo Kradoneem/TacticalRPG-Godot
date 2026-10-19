@@ -1,16 +1,32 @@
 extends "res://scripts/exploration/exploration_map.gd"
 
-## Junction map content.
-## Projection and walkability come from area_data.
-## Only the maintenance connection is active in this milestone.
+## Junction content.
+## Shared runtime owns movement, alert turns and encounters.
+## Projection and walkability come from the assigned area_data.
+
+const SewerEnemyContent = preload(
+	"res://scripts/content/sewer_enemy_content.gd"
+)
 
 @export var maintenance_exit_cells: Array[Vector2i] = [
 	Vector2i(0, 7)
 ]
 
 ## First-visit fallback.
-## SceneManager restores the actual departure cell on return visits.
+## SceneManager restores actual departures on return visits.
 @export var maintenance_arrival_cell: Vector2i = Vector2i(3, 0)
+
+@export_group("Enemy test content")
+
+@export var static_enemy_enabled: bool = true
+@export var static_enemy_cell: Vector2i = Vector2i(8, 2)
+
+## Enable after the single STATIC test passes.
+@export var patrol_enemy_enabled: bool = false
+@export var patrol_cells: Array[Vector2i] = [
+	Vector2i(6, 0),
+	Vector2i(7, 0)
+]
 
 @onready var _background: Sprite2D = $Background
 @onready var _map_camera: Camera2D = $MapCamera
@@ -34,6 +50,41 @@ func get_exit_definitions() -> Array[ExplorationExitData]:
 			maintenance_arrival_cell
 		)
 	]
+
+
+func get_enemy_spawns() -> Array[TacticalEnemySpawn]:
+	var spawns: Array[TacticalEnemySpawn] = []
+
+	if static_enemy_enabled:
+		spawns.append(
+			TacticalEnemySpawn.new(
+				&"junction_static_rats",
+				static_enemy_cell,
+				SewerEnemyContent.create_junction_static_rat_squad
+			)
+		)
+
+	if patrol_enemy_enabled:
+		if patrol_cells.size() < 2:
+			push_error(
+				"Junction PATROL requires at least two cells."
+			)
+
+			# Let the existing runtime validator reject configuration.
+			# Do not silently convert an invalid patrol into STATIC.
+			spawns.append(null)
+			return spawns
+
+		spawns.append(
+			TacticalEnemySpawn.new(
+				&"junction_patrol_rats",
+				patrol_cells[0],
+				SewerEnemyContent.create_junction_patrol_rat_squad,
+				patrol_cells
+			)
+		)
+
+	return spawns
 
 
 func _ready() -> void:
@@ -69,8 +120,7 @@ func _ready() -> void:
 	)
 
 	_hint.text = (
-		"JUNCTION | WASD: bewegen"
-		+ " | MMB: inspecteren | Home: centreren"
+		"JUNCTION | MMB: inspecteren | Home: centreren"
 		+ "\nGroen: begaanbaar | rood: blocked | grijs: UNKNOWN"
 		+ "\nMaintenance-uitgang: "
 		+ str(maintenance_exit_cells)
