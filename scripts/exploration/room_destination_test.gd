@@ -125,3 +125,6 @@ func _return_to_source() -> void:
 	if destination == null:
 		_transitioning = false
 		_description.text = "Terugkeer mislukt. Controleer Output."
+
+func can_open_party_menu() -> bool:
+	return not _transitioning

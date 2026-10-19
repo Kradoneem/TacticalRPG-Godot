@@ -368,3 +368,12 @@ func clear_overlays() -> void:
 
 func get_current_game_scene() -> Node:
 	return _current_game_scene
+
+func can_open_party_menu() -> bool:
+	return (
+		is_instance_valid(_main)
+		and is_instance_valid(_current_game_scene)
+		and not _current_game_scene.is_queued_for_deletion()
+		and not is_instance_valid(_active_game_presentation)
+		and _overlay_stack.is_empty()
+	)

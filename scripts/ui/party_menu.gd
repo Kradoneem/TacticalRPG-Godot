@@ -131,7 +131,6 @@ func close() -> void:
 	_overlay.hide()
 	closed.emit()
 
-
 func _show_root() -> void:
 	_screen = Screen.ROOT
 	_selected_navigation_index = 0
@@ -139,7 +138,11 @@ func _show_root() -> void:
 	_set_subtitle(
 		"Review squad status or inspect future management systems."
 	)
-	_set_hint("Navigate: WASD or arrow keys   •   Confirm: Enter or Space   •   Close: Escape")
+	_set_hint(
+		"Navigate: WASD or arrow keys"
+		+ "   •   Confirm: Enter or Space"
+		+ "   •   Close: Escape"
+	)
 
 	_clear_navigation()
 	_clear_details()
@@ -161,18 +164,20 @@ func _show_root() -> void:
 		"Organise units between player squads."
 	)
 
-	_add_detail_heading("PARTY OVERVIEW")
-	_add_detail_text(
+	var overview_template: String = (
 		"%d player squad(s) are currently available.\n\n"
 		+ "Status is available now. Equipment, Items and Formation are "
 		+ "visible navigation contracts, but their gameplay systems have "
 		+ "not been migrated yet."
-		% _available_squads.size()
+	)
+
+	_add_detail_heading("PARTY OVERVIEW")
+	_add_detail_text(
+		overview_template % _available_squads.size()
 	)
 
 	_refresh_navigation_selection()
 	call_deferred("_focus_selected_navigation_button")
-
 
 func _show_status_squad_selection() -> void:
 	_screen = Screen.STATUS_SQUAD_SELECTION
@@ -334,23 +339,35 @@ func _handle_back() -> void:
 		Screen.PLACEHOLDER:
 			_show_root()
 
-
 func _refresh_member_details() -> void:
 	if _current_squad == null:
 		return
 
-	if _selected_navigation_index >= _current_squad.members.size():
+	if (
+		_selected_navigation_index < 0
+		or _selected_navigation_index >= _current_squad.members.size()
+	):
 		return
 
-	var member: Unit = _current_squad.members[_selected_navigation_index]
+	var member: Unit = _current_squad.members[
+		_selected_navigation_index
+	]
 
 	_clear_details()
-
 	_add_detail_heading(member.display_name)
+
+	var stats_template: String = (
+		"Level %d\n\n"
+		+ "HP  %d / %d\n"
+		+ "MP  %d / %d\n\n"
+		+ "Attack   %d\n"
+		+ "Defense  %d\n"
+		+ "Speed    %d\n"
+		+ "Wisdom   %d"
+	)
+
 	_add_detail_text(
-		"Level %d\n\nHP  %d / %d\nMP  %d / %d\n\n"
-		+ "Attack   %d\nDefense  %d\nSpeed    %d\nWisdom   %d"
-		% [
+		stats_template % [
 			member.level,
 			member.hp,
 			member.max_hp,
@@ -391,7 +408,6 @@ func _refresh_member_details() -> void:
 				ability.description
 			]
 		)
-
 
 func _set_subtitle(new_text: String) -> void:
 	_subtitle_label.text = new_text
@@ -521,30 +537,55 @@ func _create_button_style(
 
 	return style
 
-
 func _unhandled_input(event: InputEvent) -> void:
+	# Fallback using the same public navigation entry point.
+	# Events consumed by _input do not reach this stage.
+	if handle_menu_input(event):
+		get_viewport().set_input_as_handled()
+
+func handle_menu_input(event: InputEvent) -> bool:
+	## Public keyboard-navigation entry point.
+	## Returns true when the open menu owns this keyboard event.
+	## Navigation and back/close behavior remain inside PartyMenu.
+
 	if not _is_open:
-		return
+		return false
 
 	if not event is InputEventKey:
-		return
+		return false
 
+	# Consume releases and repeats without executing another menu action.
 	if not event.is_pressed() or event.is_echo():
-		return
+		return true
 
 	if event.is_action_pressed("ui_cancel"):
 		_handle_back()
-	elif event.is_action_pressed("move_up"):
+
+	elif (
+		event.is_action_pressed("move_up")
+		or event.is_action_pressed("ui_up")
+		or event.is_action_pressed("move_left")
+		or event.is_action_pressed("ui_left")
+	):
 		_move_navigation_selection(-1)
-	elif event.is_action_pressed("move_down"):
+
+	elif (
+		event.is_action_pressed("move_down")
+		or event.is_action_pressed("ui_down")
+		or event.is_action_pressed("move_right")
+		or event.is_action_pressed("ui_right")
+	):
 		_move_navigation_selection(1)
-	elif event.is_action_pressed("move_left"):
-		_move_navigation_selection(-1)
-	elif event.is_action_pressed("move_right"):
-		_move_navigation_selection(1)
+
 	elif event.is_action_pressed("ui_accept"):
 		_activate_selected_option()
-	else:
-		return
 
-	get_viewport().set_input_as_handled()
+	# Unknown keys also stay inside the open menu.
+	return true
+
+
+func _input(event: InputEvent) -> void:
+	# Run before focused Buttons handle keyboard events.
+	# Mouse clicks still use the existing Button.pressed connections.
+	if handle_menu_input(event):
+		get_viewport().set_input_as_handled()

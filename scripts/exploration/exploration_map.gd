@@ -132,3 +132,27 @@ func _update_runtime_status() -> void:
 func _process(_delta: float) -> void:
 	if _runtime_status != null:
 		_runtime_status.visible = not _exit_interaction_active and not _combat_presentation_active
+
+func can_open_party_menu() -> bool:
+	if (
+		_runtime == null
+		or _exit_interaction_active
+		or _combat_presentation_active
+	):
+		return false
+
+	if (
+		player_marker.squad == null
+		or not player_marker.squad.is_alive()
+		or _runtime.turns == null
+		or _runtime.encounters == null
+	):
+		return false
+
+	# Alert means tactical combat has started.
+	# Tactical actions and strategy selection also block Party.
+	return (
+		_runtime.turns.is_free_exploration()
+		and not _runtime.turns.input_suspended
+		and not _runtime.encounters.is_busy()
+	)
