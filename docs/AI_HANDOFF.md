@@ -1,3 +1,47 @@
+
+# Actuele aanvulling — 20 oktober 2026
+
+Dit blok heeft voorrang op conflicterende statusclaims hieronder.
+De eerdere junction-, battle-lifecycle- en centrale Party-milestones
+blijven afgerond.
+
+## Nieuw getest en gepusht gameplay-ijkpunt
+
+- Commit: `21fb38f — feat: add item catalog and quantity-based party consumables`.
+- Volledige SHA: `21fb38f10d2b7b7ce933ea76963a6334e2e3f4b4`.
+- Automatische datatest en handmatige gameplaytests zijn door de gebruiker
+  geslaagd verklaard.
+- Items is geen Party-placeholder meer. Equipment en Formation blijven
+  placeholders.
+
+## Itemarchitectuur
+
+- `scripts/domain/item_data.gd`: centrale catalogus met itemdefinities.
+- `GameItem` en `ItemEffect`: Resources met beschrijving en effecten,
+  zonder voorraadgegevens.
+- `GameState.item_inventory`: dictionary met item-ID → hoeveelheid.
+- `GameState.add_item()` en `use_item()`: voorraad, ownership en verbruik.
+- `ItemUseResolver`: valideert alle effecten vóór uitvoering.
+- PartyMenu: item → squad → één levend lid → gebruik en feedback.
+- Bestaande Unit-referenties worden aangepast; geen gameplaykopieën.
+
+## Gevalideerd gedrag en grenzen
+
+- HP-/MP-herstel, samengestelde Elixir-effecten en éénmalig verbruik.
+- Annuleren zonder verbruik; nulvoorraad wordt verwijderd.
+- Menu-inputisolatie, alertblokkering en behouden toestand bij kamerterugkeer.
+- Gebruik op een vol target verbruikt voorlopig één item, conform Python.
+- Prototypecontent: Potion 20 HP, Hi-Potion 50 HP, Ether 10 MP,
+  Elixir 30 HP en 30 MP. Startvoorraad: één van elk.
+- Deze voorraad is geen definitief Chapter-1-resourcebudget.
+- Battle-itemgebruik, automatische itemstrategieën, classbonussen,
+  revival en groepsheals zijn niet geïmplementeerd.
+- Een encounter-party-heal is een latere ontwerpwens.
+- Volgende gameplay-milestone nog niet gekozen; herijken tegen actuele
+  code en bestaande Python-functionaliteit. Geen art- of battle-polish.
+
+---
+
 # Actuele projectstatus — 19 oktober 2026
 
 Dit blok heeft voorrang op alle historische statusclaims en roadmaps hieronder. Historische passages blijven als context behouden, maar zijn geen actuele bouwopdracht. Controleer bij iedere nieuwe sessie eerst de huidige Git HEAD via de GitHub API en lees vervolgens SHA-gepinde bestanden. Recente expliciete gebruikersbesluiten hebben voorrang.
