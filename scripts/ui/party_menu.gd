@@ -16,6 +16,10 @@ enum Screen {
 	ITEM_SELECTION,
 	ITEM_SQUAD_SELECTION,
 	ITEM_TARGET_SELECTION,
+	EQUIPMENT_SQUAD_SELECTION,
+	EQUIPMENT_MEMBER_SELECTION,
+	EQUIPMENT_SLOT_SELECTION,
+	EQUIPMENT_CHOICE,
 	PLACEHOLDER
 }
 
@@ -35,6 +39,10 @@ var _is_open: bool = false
 var _available_item_ids: Array[StringName] = []
 var _selected_item_id: StringName = &""
 var _item_targets: Array[Unit] = []
+var _equipment_squad: Squad
+var _equipment_unit: Unit
+var _equipment_slot: StringName = &""
+var _equipment_choices: Array[StringName] = []
 
 func _ready() -> void:
 	layer = 20
@@ -144,7 +152,12 @@ func _show_root() -> void:
 	_available_item_ids.clear()
 	_item_targets.clear()
 
-	_set_subtitle("Review squad status or use recovery items.")
+	_equipment_squad = null
+	_equipment_unit = null
+	_equipment_slot = &""
+	_equipment_choices.clear()
+
+	_set_subtitle("Review status, manage equipment or use recovery items.")
 	_set_hint(
 		"Navigate: WASD or arrow keys"
 		+ "   •   Confirm: Enter or Space"
@@ -160,7 +173,7 @@ func _show_root() -> void:
 	)
 	_add_navigation_button(
 		"Equipment",
-		"View and change equipped gear."
+		"Equip, replace or remove gear."
 	)
 	_add_navigation_button(
 		"Items",
@@ -173,14 +186,12 @@ func _show_root() -> void:
 
 	var overview_template: String = (
 		"%d player squad(s) are currently available.\n\n"
-		+ "Status and single-target recovery items are available.\n\n"
-		+ "Equipment and Formation remain placeholders."
+		+ "Status, Equipment and single-target recovery items "
+		+ "are available.\n\nFormation remains a placeholder."
 	)
 
 	_add_detail_heading("PARTY OVERVIEW")
-	_add_detail_text(
-		overview_template % _available_squads.size()
-	)
+	_add_detail_text(overview_template % _available_squads.size())
 
 	_refresh_navigation_selection()
 	call_deferred("_focus_selected_navigation_button")
@@ -280,12 +291,8 @@ func _activate_selected_option() -> void:
 				0:
 					_show_status_squad_selection()
 				1:
-					_show_placeholder(
-						"EQUIPMENT",
-						"Equipment and loadouts are not migrated yet.\n\n"
-						+ "This menu entry exists now so its navigation "
-						+ "contract is stable before equipment slots, "
-						+ "start abilities and finishing abilities are added."
+					_show_equipment_screen(
+						Screen.EQUIPMENT_SQUAD_SELECTION
 					)
 				2:
 					_show_item_selection()
@@ -329,6 +336,12 @@ func _activate_selected_option() -> void:
 		Screen.ITEM_TARGET_SELECTION:
 			_use_selected_item()
 
+		Screen.EQUIPMENT_SQUAD_SELECTION, \
+		Screen.EQUIPMENT_MEMBER_SELECTION, \
+		Screen.EQUIPMENT_SLOT_SELECTION, \
+		Screen.EQUIPMENT_CHOICE:
+			_activate_equipment_option()
+
 func _move_navigation_selection(direction: int) -> void:
 	if _navigation_buttons.is_empty():
 		return
@@ -366,6 +379,18 @@ func _handle_back() -> void:
 
 		Screen.ITEM_TARGET_SELECTION:
 			_show_item_squad_selection()
+
+		Screen.EQUIPMENT_SQUAD_SELECTION:
+			_show_root()
+
+		Screen.EQUIPMENT_MEMBER_SELECTION:
+			_show_equipment_screen(Screen.EQUIPMENT_SQUAD_SELECTION)
+
+		Screen.EQUIPMENT_SLOT_SELECTION:
+			_show_equipment_screen(Screen.EQUIPMENT_MEMBER_SELECTION)
+
+		Screen.EQUIPMENT_CHOICE:
+			_show_equipment_screen(Screen.EQUIPMENT_SLOT_SELECTION)
 
 		Screen.PLACEHOLDER:
 			_show_root()
@@ -817,3 +842,240 @@ func _use_selected_item() -> void:
 		feedback = "%s used.\n%s" % [item.display_name, feedback]
 
 	_show_item_selection(feedback)
+
+func _show_equipment_screen(
+	next_screen: Screen,
+	feedback: String = ""
+) -> void:
+	_screen = next_screen
+	_selected_navigation_index = 0
+	_equipment_choices.clear()
+
+	_clear_navigation()
+	_clear_details()
+
+	_set_hint(
+		"Navigate: WASD or arrow keys"
+		+ "   •   Confirm: Enter or Space"
+		+ "   •   Back: Escape"
+	)
+
+	match _screen:
+		Screen.EQUIPMENT_SQUAD_SELECTION:
+			_equipment_squad = null
+			_equipment_unit = null
+			_equipment_slot = &""
+			_set_subtitle("Equipment — choose a squad.")
+
+			for squad: Squad in _available_squads:
+				_add_navigation_button(
+					squad.display_name,
+					"%d member(s)" % squad.members.size()
+				)
+
+			_add_detail_heading("EQUIPMENT")
+			_add_detail_text(
+				"Choose a squad, member and equipment slot.\n\n"
+				+ "Equipped gear is removed from available stock. "
+				+ "Replaced gear returns to stock."
+			)
+
+		Screen.EQUIPMENT_MEMBER_SELECTION:
+			if _equipment_squad == null:
+				_show_equipment_screen(Screen.EQUIPMENT_SQUAD_SELECTION)
+				return
+
+			_set_subtitle(
+				"%s — choose a member." % _equipment_squad.display_name
+			)
+
+			for member: Unit in _equipment_squad.members:
+				_add_navigation_button(
+					member.display_name,
+					member.get_summary()
+				)
+
+			_add_detail_heading("CHOOSE A MEMBER")
+			_add_detail_text(
+				"Equipment changes the same Unit used by gameplay."
+			)
+
+		Screen.EQUIPMENT_SLOT_SELECTION:
+			if _equipment_unit == null:
+				_show_equipment_screen(Screen.EQUIPMENT_MEMBER_SELECTION)
+				return
+
+			_set_subtitle(
+				"%s — choose a slot." % _equipment_unit.display_name
+			)
+
+			for slot: StringName in Equipment.SLOTS:
+				var current_id: StringName = (
+					_equipment_unit.get_equipment_id(slot)
+				)
+				var gear: Equipment = EquipmentData.get_equipment(
+					current_id
+				)
+				var gear_name: String = (
+					gear.display_name if gear != null else "(empty)"
+				)
+
+				_add_navigation_button(
+					String(slot).capitalize(),
+					gear_name
+				)
+
+			_add_equipment_unit_details()
+
+		Screen.EQUIPMENT_CHOICE:
+			if _equipment_unit == null or _equipment_slot == &"":
+				_show_equipment_screen(Screen.EQUIPMENT_SLOT_SELECTION)
+				return
+
+			_set_subtitle(
+				"%s — %s" % [
+					_equipment_unit.display_name,
+					_equipment_slot
+				]
+			)
+
+			var current_id: StringName = (
+				_equipment_unit.get_equipment_id(_equipment_slot)
+			)
+
+			for gear_id: StringName in EquipmentData.get_all_equipment_ids():
+				var gear: Equipment = EquipmentData.get_equipment(gear_id)
+				var quantity: int = GameState.get_equipment_quantity(gear_id)
+
+				if (
+					StringName(gear.slot) != _equipment_slot
+					or quantity <= 0
+					or gear_id == current_id
+				):
+					continue
+
+				_equipment_choices.append(gear_id)
+				_add_navigation_button(
+					"%s × %d" % [gear.display_name, quantity],
+					gear.get_bonus_summary()
+				)
+
+			if current_id != &"":
+				_equipment_choices.append(&"")
+				_add_navigation_button(
+					"(Unequip)",
+					"Return current gear to inventory."
+				)
+
+			_add_equipment_unit_details()
+
+			if _equipment_choices.is_empty():
+				_add_detail_text("No equipment is available for this slot.")
+
+			_add_detail_text(
+				"Maximum-HP changes preserve HP percentage, "
+				+ "rounded down. Defeated members remain defeated."
+			)
+
+	if not feedback.is_empty():
+		_add_detail_heading("EQUIPMENT RESULT")
+		_add_detail_text(feedback)
+
+	_refresh_navigation_selection()
+	call_deferred("_focus_selected_navigation_button")
+
+
+func _activate_equipment_option() -> void:
+	var index: int = _selected_navigation_index
+
+	if index < 0:
+		return
+
+	match _screen:
+		Screen.EQUIPMENT_SQUAD_SELECTION:
+			if index >= _available_squads.size():
+				return
+
+			_equipment_squad = _available_squads[index]
+			_show_equipment_screen(Screen.EQUIPMENT_MEMBER_SELECTION)
+
+		Screen.EQUIPMENT_MEMBER_SELECTION:
+			if (
+				_equipment_squad == null
+				or index >= _equipment_squad.members.size()
+			):
+				return
+
+			_equipment_unit = _equipment_squad.members[index]
+			_show_equipment_screen(Screen.EQUIPMENT_SLOT_SELECTION)
+
+		Screen.EQUIPMENT_SLOT_SELECTION:
+			if index >= Equipment.SLOTS.size():
+				return
+
+			_equipment_slot = Equipment.SLOTS[index]
+			_show_equipment_screen(Screen.EQUIPMENT_CHOICE)
+
+		Screen.EQUIPMENT_CHOICE:
+			if index >= _equipment_choices.size():
+				return
+
+			var result: Dictionary = GameState.change_equipment(
+				_equipment_unit,
+				_equipment_slot,
+				_equipment_choices[index]
+			)
+
+			_show_equipment_screen(
+				Screen.EQUIPMENT_SLOT_SELECTION,
+				str(result.get("message", "Equipment change failed."))
+			)
+
+
+func _add_equipment_unit_details() -> void:
+	if _equipment_unit == null:
+		return
+
+	_add_detail_heading(_equipment_unit.display_name)
+
+	_add_detail_text(
+		"HP %d/%d  •  MP %d/%d\n\n"
+		% [
+			_equipment_unit.hp,
+			_equipment_unit.max_hp,
+			_equipment_unit.mp,
+			_equipment_unit.max_mp
+		]
+	)
+
+	var stats_template: String = (
+		"Attack   %d  (base %d)\n"
+		+ "Defense  %d  (base %d)\n"
+		+ "Speed    %d  (base %d)\n"
+		+ "Wisdom   %d  (base %d)"
+	)
+
+	_add_detail_text(
+		stats_template % [
+			_equipment_unit.attack,
+			_equipment_unit.base_attack,
+			_equipment_unit.defense,
+			_equipment_unit.base_defense,
+			_equipment_unit.speed,
+			_equipment_unit.base_speed,
+			_equipment_unit.wisdom,
+			_equipment_unit.base_wisdom
+		]
+	)
+
+	for slot: StringName in Equipment.SLOTS:
+		var gear: Equipment = EquipmentData.get_equipment(
+			_equipment_unit.get_equipment_id(slot)
+		)
+
+		_add_detail_text(
+			"%s: %s" % [
+				String(slot).capitalize(),
+				gear.display_name if gear != null else "(empty)"
+			]
+		)

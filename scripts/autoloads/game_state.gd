@@ -12,11 +12,13 @@ signal flag_changed(flag_id: String, enabled: bool)
 signal quest_status_changed(quest_id: String, new_status: String)
 signal squads_changed
 signal item_inventory_changed
+signal equipment_inventory_changed
+signal unit_equipment_changed(unit: Unit)
 
 var party: Array = []
-var equipment_inventory: Array = []
 var item_inventory: Dictionary = {}
 var squads: Array = []
+var equipment_inventory: Dictionary = {}
 
 var chapter: int = 1
 var day: float = 1.0
@@ -55,14 +57,20 @@ func start_new_game() -> void:
 	quest_states.clear()
 	cleared_locations.clear()
 
-	# Python prototype stock, excluding Group Potion.
+	# Existing Python prototype stock; not final Chapter 1 balancing.
 	item_inventory[&"potion"] = 1
 	item_inventory[&"hi_potion"] = 1
 	item_inventory[&"ether"] = 1
 	item_inventory[&"elixir"] = 1
 
+	equipment_inventory[&"iron_sword"] = 1
+	equipment_inventory[&"wooden_shield"] = 1
+	equipment_inventory[&"berserkers_ring"] = 1
+	equipment_inventory[&"sages_ring"] = 1
+
 	create_chapter_one_main_squad()
 	item_inventory_changed.emit()
+	equipment_inventory_changed.emit()
 
 	var main_squad = get_main_squad()
 
@@ -221,3 +229,121 @@ func use_item(item_id: StringName, target: Unit) -> Dictionary:
 	item_inventory_changed.emit()
 
 	return result
+
+func get_equipment_quantity(equipment_id: StringName) -> int:
+	return int(equipment_inventory.get(equipment_id, 0))
+
+
+func add_equipment(
+	equipment_id: StringName,
+	amount: int = 1
+) -> bool:
+	var gear: Equipment = EquipmentData.get_equipment(equipment_id)
+
+	if (
+		amount <= 0
+		or gear == null
+		or not gear.is_valid_definition()
+	):
+		return false
+
+	equipment_inventory[equipment_id] = (
+		get_equipment_quantity(equipment_id) + amount
+	)
+	equipment_inventory_changed.emit()
+	return true
+
+
+func change_equipment(
+	unit: Unit,
+	slot: StringName,
+	new_equipment_id: StringName = &""
+) -> Dictionary:
+	## Empty ID means unequip.
+	## No await or signals during the stock-transfer transaction.
+
+	if unit == null:
+		return {"success": false, "message": "No unit selected."}
+
+	var squad: Squad = get_squad_of(unit)
+
+	if squad == null or squad.autonomy_mode == Squad.AutonomyMode.ENEMY:
+		return {
+			"success": false,
+			"message": "Choose a member of a player squad."
+		}
+
+	if slot not in Equipment.SLOTS:
+		return {"success": false, "message": "Unknown equipment slot."}
+
+	var old_id: StringName = unit.get_equipment_id(slot)
+
+	if old_id == new_equipment_id:
+		return {
+			"success": false,
+			"message": "This slot already has that equipment."
+		}
+
+	var new_gear: Equipment = null
+
+	if new_equipment_id != &"":
+		new_gear = EquipmentData.get_equipment(new_equipment_id)
+
+		if (
+			new_gear == null
+			or not new_gear.is_valid_definition()
+			or StringName(new_gear.slot) != slot
+		):
+			return {
+				"success": false,
+				"message": "Equipment does not fit this slot."
+			}
+
+		if get_equipment_quantity(new_equipment_id) <= 0:
+			return {
+				"success": false,
+				"message": "This equipment is not available."
+			}
+
+	if old_id != &"" and EquipmentData.get_equipment(old_id) == null:
+		return {
+			"success": false,
+			"message": "Current equipment definition is missing."
+		}
+
+	if not unit.set_equipment(slot, new_equipment_id):
+		return {
+			"success": false,
+			"message": "Equipment change was rejected."
+		}
+
+	if new_equipment_id != &"":
+		var remaining: int = (
+			get_equipment_quantity(new_equipment_id) - 1
+		)
+
+		if remaining == 0:
+			equipment_inventory.erase(new_equipment_id)
+		else:
+			equipment_inventory[new_equipment_id] = remaining
+
+	if old_id != &"":
+		equipment_inventory[old_id] = get_equipment_quantity(old_id) + 1
+
+	var message: String
+
+	if new_gear == null:
+		message = "%s unequipped %s." % [
+			unit.display_name,
+			String(slot)
+		]
+	else:
+		message = "%s equipped %s." % [
+			unit.display_name,
+			new_gear.display_name
+		]
+
+	equipment_inventory_changed.emit()
+	unit_equipment_changed.emit(unit)
+
+	return {"success": true, "message": message}

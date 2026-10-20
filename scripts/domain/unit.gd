@@ -1,9 +1,8 @@
 class_name Unit
-
 extends RefCounted
 
-## Persistent gameplay data for one character or creature.
-## Tactical tokens display this data, but do not own it.
+## Persistent gameplay data shared by tactical and battle.
+## Effective stats are base stats plus currently equipped bonuses.
 
 var unit_id: String
 var display_name: String
@@ -11,18 +10,55 @@ var display_name: String
 var level: int
 var experience: int = 0
 
-var max_hp: int
-var hp: int
+var base_max_hp: int = 0
+var base_attack: int = 0
+var base_defense: int = 0
+var base_speed: int = 0
+var base_wisdom: int = 0
 
+var hp: int
 var max_mp: int
 var mp: int
 
-var attack: int
-var defense: int
-var speed: int
-var wisdom: int
+## Existing callers still read/write effective stat properties.
+## New progression code changes base stats explicitly.
+var max_hp: int:
+	get:
+		return base_max_hp + get_equipment_bonus(&"max_hp")
+	set(value):
+		base_max_hp = value - get_equipment_bonus(&"max_hp")
 
-var equipment: Dictionary = {}
+var attack: int:
+	get:
+		return base_attack + get_equipment_bonus(&"attack")
+	set(value):
+		base_attack = value - get_equipment_bonus(&"attack")
+
+var defense: int:
+	get:
+		return base_defense + get_equipment_bonus(&"defense")
+	set(value):
+		base_defense = value - get_equipment_bonus(&"defense")
+
+var speed: int:
+	get:
+		return base_speed + get_equipment_bonus(&"speed")
+	set(value):
+		base_speed = value - get_equipment_bonus(&"speed")
+
+var wisdom: int:
+	get:
+		return base_wisdom + get_equipment_bonus(&"wisdom")
+	set(value):
+		base_wisdom = value - get_equipment_bonus(&"wisdom")
+
+## Slot -> equipment ID. Mutation goes through set_equipment().
+var _equipment: Dictionary = {}
+
+var equipment: Dictionary:
+	get:
+		return _equipment.duplicate()
+
 var learned_skills: Array[StringName] = []
 var learned_spells: Array[StringName] = []
 
@@ -40,18 +76,94 @@ func _init(
 ) -> void:
 	unit_id = new_unit_id
 	display_name = new_display_name
-
 	level = starting_level
-	max_hp = starting_max_hp
-	hp = max_hp
 
+	base_max_hp = starting_max_hp
+	base_attack = starting_attack
+	base_defense = starting_defense
+	base_speed = starting_speed
+	base_wisdom = starting_wisdom
+
+	hp = max_hp
 	max_mp = starting_max_mp
 	mp = max_mp
 
-	attack = starting_attack
-	defense = starting_defense
-	speed = starting_speed
-	wisdom = starting_wisdom
+
+func get_equipment_id(slot: StringName) -> StringName:
+	return StringName(_equipment.get(slot, &""))
+
+
+func get_equipment_bonus(stat: StringName) -> int:
+	var total: int = 0
+
+	for equipment_id in _equipment.values():
+		var gear: Equipment = EquipmentData.get_equipment(
+			StringName(equipment_id)
+		)
+
+		if gear != null:
+			total += gear.get_bonus(stat)
+
+	return total
+
+
+func set_equipment(
+	slot: StringName,
+	equipment_id: StringName
+) -> bool:
+	## Only changes Unit data.
+	## GameState owns stock validation and transfers.
+
+	if slot not in Equipment.SLOTS:
+		return false
+
+	if equipment_id != &"":
+		var gear: Equipment = EquipmentData.get_equipment(equipment_id)
+
+		if (
+			gear == null
+			or not gear.is_valid_definition()
+			or StringName(gear.slot) != slot
+		):
+			return false
+
+	var old_id: StringName = get_equipment_id(slot)
+
+	if old_id == equipment_id:
+		return false
+
+	var old_max_hp: int = max_hp
+	var old_hp: int = hp
+
+	if equipment_id == &"":
+		_equipment.erase(slot)
+	else:
+		_equipment[slot] = equipment_id
+
+	if max_hp <= 0:
+		if old_id == &"":
+			_equipment.erase(slot)
+		else:
+			_equipment[slot] = old_id
+		return false
+
+	_preserve_health_ratio(old_hp, old_max_hp)
+	return true
+
+func _preserve_health_ratio(old_hp: int, old_max_hp: int) -> void:
+	if old_hp <= 0:
+		hp = 0
+		return
+
+	if old_max_hp <= 0:
+		hp = clampi(old_hp, 1, max_hp)
+		return
+
+	hp = clampi(
+		floori(float(old_hp) * float(max_hp) / float(old_max_hp)),
+		1,
+		max_hp
+	)
 
 
 func is_alive() -> bool:
@@ -61,14 +173,12 @@ func is_alive() -> bool:
 func take_damage(amount: int) -> int:
 	var applied_damage: int = maxi(0, amount)
 	hp = maxi(0, hp - applied_damage)
-
 	return applied_damage
 
 
 func heal(amount: int) -> int:
 	var previous_hp: int = hp
 	hp = mini(max_hp, hp + maxi(0, amount))
-
 	return hp - previous_hp
 
 
@@ -85,8 +195,8 @@ func spend_mp(amount: int) -> bool:
 func restore_mp(amount: int) -> int:
 	var previous_mp: int = mp
 	mp = mini(max_mp, mp + maxi(0, amount))
-
 	return mp - previous_mp
+
 
 func learn_ability(ability_id: StringName) -> bool:
 	var ability := SkillData.get_skill(ability_id)
@@ -117,14 +227,11 @@ func knows_ability(ability_id: StringName) -> bool:
 	)
 
 
-## Compatibility method for existing callers.
-## New game code should use learn_ability().
+## Compatibility methods. New code uses learn_ability().
 func learn_skill(skill_id: StringName) -> void:
 	learn_ability(skill_id)
 
 
-## Compatibility method for existing callers.
-## New game code should use learn_ability().
 func learn_spell(spell_id: StringName) -> void:
 	learn_ability(spell_id)
 
@@ -155,10 +262,8 @@ func get_learned_spell_ids() -> Array[StringName]:
 
 func get_all_learned_ability_ids() -> Array[StringName]:
 	var ability_ids: Array[StringName] = []
-
 	ability_ids.append_array(learned_skills)
 	ability_ids.append_array(learned_spells)
-
 	return ability_ids
 
 
@@ -167,7 +272,6 @@ func gain_experience(amount: int) -> int:
 		return 0
 
 	experience += amount
-
 	var levels_gained: int = 0
 
 	while experience >= get_experience_to_next_level():
@@ -185,12 +289,13 @@ func get_experience_to_next_level() -> int:
 func level_up() -> void:
 	level += 1
 
-	attack += 1
-	defense += 1
-	speed += 1
-	wisdom += 1
+	base_attack += 1
+	base_defense += 1
+	base_speed += 1
+	base_wisdom += 1
+	base_max_hp += 5
 
-	max_hp += 5
+	# Existing progression behavior: level-up restores HP.
 	hp = max_hp
 
 
