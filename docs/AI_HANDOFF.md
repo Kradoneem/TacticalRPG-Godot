@@ -16,7 +16,7 @@
 - Party blijft tijdens tactical alert en battle geblokkeerd.
 - Geen NPC-inlevering, questrewards, dialogue of save/load geïmplementeerd.
 - Encounter-rewards blijven afzonderlijk en worden niet door quests herhaald.
-- Teststatus: nog te bevestigen.
+- Teststatus: werkt
 
 # Encounter-results — nieuw ontwerpcontract
 
