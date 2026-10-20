@@ -18,8 +18,6 @@ var _party_formation: VBoxContainer
 var _enemy_formation: VBoxContainer
 var _status_label: Label
 var _return_button: Button
-var _attack_button: Button
-var _focused_strike_button: Button
 var _target_buttons: Array[Button] = []
 var _selected_target_index: int = 0
 var _party_cards: Array[BattleUnitCard] = []
@@ -30,6 +28,7 @@ var _results_panel: EncounterResultsPanel
 var _action_sequence_running: bool = false
 var _transition_processed: bool = false
 var _finish_emitted: bool = false
+var _ability_menu: BattleAbilityMenu
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -204,146 +203,23 @@ func _hide_action_feedback_after_delay(
 	_action_feedback_label.hide()
 
 func _build_command_hud(parent: VBoxContainer) -> void:
-	var hud_panel := PanelContainer.new()
-	hud_panel.custom_minimum_size = Vector2(0.0, 72.0)
+	var panel := PanelContainer.new()
 
-	var hud_style := StyleBoxFlat.new()
-	hud_style.bg_color = Color("#10171d")
-	hud_style.border_color = Color("#71889a")
-	hud_style.set_border_width_all(2)
-	hud_style.set_corner_radius_all(8)
-	hud_panel.add_theme_stylebox_override("panel", hud_style)
-
-	parent.add_child(hud_panel)
-
-	var content := HBoxContainer.new()
-	content.add_theme_constant_override("separation", 14)
-	hud_panel.add_child(content)
-
-	var command_label := Label.new()
-	command_label.text = "COMMAND"
-	command_label.custom_minimum_size = Vector2(170.0, 0.0)
-	command_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	command_label.add_theme_font_size_override("font_size", 20)
-	content.add_child(command_label)
-
-	_attack_button = _create_command_button(
-		"Attack\nReliable physical damage"
-	)
-	_attack_button.pressed.connect(_on_attack_button_pressed)
-	content.add_child(_attack_button)
-
-	_focused_strike_button = _create_command_button(
-		"Focused Strike\nPowerful weapon technique"
-	)
-	_focused_strike_button.pressed.connect(
-		_on_focused_strike_button_pressed
-	)
-	content.add_child(_focused_strike_button)
-
-	_configure_command_navigation()
-
-func _create_command_button(button_text: String) -> Button:
-	var button := Button.new()
-	button.text = button_text
-	button.custom_minimum_size = Vector2(280.0, 52.0)
-	button.focus_mode = Control.FOCUS_ALL
-
-	button.add_theme_stylebox_override(
-		"normal",
-		_create_command_button_style(
-			Color("#27323a"),
-			Color("#61707a"),
-			2
-		)
-	)
-
-	button.add_theme_stylebox_override(
-		"hover",
-		_create_command_button_style(
-			Color("#344751"),
-			Color("#9fb7c2"),
-			2
-		)
-	)
-
-	button.add_theme_stylebox_override(
-		"focus",
-		_create_command_button_style(
-			Color("#5a5128"),
-			Color("#ffe183"),
-			4
-		)
-	)
-
-	button.add_theme_stylebox_override(
-		"pressed",
-		_create_command_button_style(
-			Color("#75652e"),
-			Color("#fff1ae"),
-			4
-		)
-	)
-
-	return button
-
-func _create_command_button_style(
-	background_color: Color,
-	border_color: Color,
-	border_width: int
-) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = background_color
-	style.border_color = border_color
-	style.set_border_width_all(border_width)
-	style.set_corner_radius_all(6)
+	style.bg_color = Color("#10171d")
+	style.border_color = Color("#71889a")
+	style.set_border_width_all(2)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
 
-	return style
+	panel.add_theme_stylebox_override("panel", style)
+	parent.add_child(panel)
 
-func _configure_command_navigation() -> void:
-	_attack_button.focus_neighbor_left = _attack_button.get_path_to(
-		_focused_strike_button
-	)
-
-	_attack_button.focus_neighbor_right = _attack_button.get_path_to(
-		_focused_strike_button
-	)
-
-	_attack_button.focus_neighbor_top = _attack_button.get_path_to(
-		_focused_strike_button
-	)
-
-	_attack_button.focus_neighbor_bottom = _attack_button.get_path_to(
-		_focused_strike_button
-	)
-
-	_focused_strike_button.focus_neighbor_left = (
-		_focused_strike_button.get_path_to(_attack_button)
-	)
-
-	_focused_strike_button.focus_neighbor_right = (
-		_focused_strike_button.get_path_to(_attack_button)
-	)
-
-	_focused_strike_button.focus_neighbor_top = (
-		_focused_strike_button.get_path_to(_attack_button)
-	)
-
-	_focused_strike_button.focus_neighbor_bottom = (
-		_focused_strike_button.get_path_to(_attack_button)
-	)
-
-func _focus_first_available_command() -> void:
-	if _attack_button != null and not _attack_button.disabled:
-		_attack_button.grab_focus()
-		return
-
-	if (
-		_focused_strike_button != null
-		and not _focused_strike_button.disabled
-	):
-		_focused_strike_button.grab_focus()
+	_ability_menu = BattleAbilityMenu.new()
+	_ability_menu.command_requested.connect(_on_command_selected)
+	panel.add_child(_ability_menu)
 
 func _create_formation_column(
 	formation_title: String,
@@ -452,72 +328,74 @@ func _refresh_formation_cards() -> void:
 			enemy_card.remove_meta("target_unit_id")
 
 func _refresh_presentation() -> void:
-	if _party_formation == null or _enemy_formation == null:
+	if (
+		_party_formation == null
+		or _enemy_formation == null
+		or _return_button == null
+		or _ability_menu == null
+	):
+		return
+
+	if _transition_processed:
 		return
 
 	if battle_session == null or not battle_session.is_valid():
 		_status_label.text = "No valid battle session was received."
 		_return_button.disabled = true
-		_attack_button.disabled = true
-		_focused_strike_button.disabled = true
+		_ability_menu.refresh(null, true)
 		return
 
-	var protagonist := battle_session.get_protagonist()
-	var primary_enemy := battle_session.get_primary_enemy_target()
+	var protagonist: Unit = battle_session.get_protagonist()
+	var primary_enemy: Unit = battle_session.get_primary_enemy_target()
 
-	var protagonist_name := "Unknown commander"
-	var target_text := "No living enemy"
-
-	if protagonist != null:
-		protagonist_name = protagonist.display_name
+	var protagonist_name: String = (
+		protagonist.display_name
+		if protagonist != null
+		else "Unknown commander"
+	)
+	var target_text: String = "No living enemy"
 
 	if battle_session.is_target_selection_active():
 		target_text = (
-			"Choose a target for %s — arrows select, Enter confirms, Escape cancels."
+			"Choose a target for %s — WASD/arrows, Enter/Space, Escape."
 			% battle_session.get_selected_command_text()
 		)
 	elif primary_enemy != null:
 		target_text = "Primary target: %s" % primary_enemy.display_name
 
-	_status_label.text = "%s | Strategy: %s\nPhase: %s\nCommander: %s | %s" % [
-		battle_session.get_initiator_text(),
-		encounter_context.active_strategy,
-		battle_session.get_phase_text(),
-		protagonist_name,
-		target_text
-	]
+	_status_label.text = (
+		"%s | Strategy: %s\nPhase: %s\nCommander: %s | %s"
+		% [
+			battle_session.get_initiator_text(),
+			encounter_context.active_strategy,
+			battle_session.get_phase_text(),
+			protagonist_name,
+			target_text
+		]
+	)
 
-	var latest_log := battle_session.get_latest_log_text(5)
+	var latest_log: String = battle_session.get_latest_log_text(5)
 
 	if not latest_log.is_empty():
 		_status_label.text += "\n\n" + latest_log
 
-	_attack_button.disabled = (
-		not battle_session.can_accept_protagonist_command()
-	)
-
-	_focused_strike_button.disabled = (
-		protagonist == null
-		or not protagonist.knows_skill(&"focused_strike")
-		or not battle_session.can_accept_protagonist_command()
-	)
-
-	_return_button.disabled = not battle_session.is_finished()
-
-	if battle_session.is_finished():
-		_return_button.text = "Return to tactical map"
-	else:
-		_return_button.text = "Battle in progress"
-
 	_refresh_formation_cards()
+	_ability_menu.refresh(battle_session, _action_sequence_running)
 
-	if battle_session.is_finished():
-		call_deferred("_focus_return_button")
-	elif battle_session.is_target_selection_active():
+	# Automatic ending is the normal route; button remains a fallback.
+	_return_button.disabled = (
+		not battle_session.is_finished()
+		or _action_sequence_running
+	)
+	_return_button.text = (
+		"Return to tactical map"
+		if battle_session.is_finished()
+		else "Battle in progress"
+	)
+
+	if battle_session.is_target_selection_active():
 		_configure_target_navigation()
 		call_deferred("_focus_first_target")
-	elif battle_session.can_accept_protagonist_command():
-		call_deferred("_focus_first_available_command")
 
 func _focus_return_button() -> void:
 	if _return_button == null or _return_button.disabled:
@@ -557,26 +435,13 @@ func _on_return_button_pressed() -> void:
 	add_child(_results_panel)
 	_results_panel.configure(result)
 
-func _on_attack_button_pressed() -> void:
-	if battle_session == null:
-		return
-
-	if not battle_session.can_accept_protagonist_command():
-		return
-
-	command_selected.emit(&"basic_attack")
-
-func _on_focused_strike_button_pressed() -> void:
-	if battle_session == null:
-		return
-
-	if not battle_session.can_accept_protagonist_command():
-		return
-
-	command_selected.emit(&"focused_strike")
-
 func _on_command_selected(command_id: StringName) -> void:
-	if battle_session == null:
+	if (
+		battle_session == null
+		or _action_sequence_running
+		or _transition_processed
+		or not battle_session.can_accept_protagonist_command()
+	):
 		return
 
 	_action_feedback_serial += 1
@@ -588,10 +453,14 @@ func _on_command_selected(command_id: StringName) -> void:
 	_refresh_presentation()
 
 func _on_enemy_target_selected(target_unit_id: String) -> void:
-	if battle_session == null:
+	if (
+		battle_session == null
+		or _action_sequence_running
+		or _transition_processed
+	):
 		return
 
-	var resolved_action := battle_session.confirm_enemy_target(
+	var resolved_action: BattleAction = battle_session.confirm_enemy_target(
 		target_unit_id
 	)
 
@@ -608,6 +477,7 @@ func _continue_after_protagonist_action() -> void:
 		return
 
 	_action_sequence_running = true
+	_refresh_presentation()
 
 	await get_tree().create_timer(
 		PROTAGONIST_ACTION_DISPLAY_SECONDS
@@ -617,11 +487,13 @@ func _continue_after_protagonist_action() -> void:
 
 	_action_sequence_running = false
 
-	if (
-		battle_session != null
-		and battle_session.is_finished()
-		and not _transition_processed
-	):
+	if battle_session == null or _transition_processed:
+		return
+
+	# Expose the next command menu only after the automatic sequence ends.
+	_refresh_presentation()
+
+	if battle_session.is_finished():
 		_on_return_button_pressed()
 
 func _play_automatic_action_sequence() -> void:
@@ -721,37 +593,58 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
-	if _transition_processed:
+	if _transition_processed or _action_sequence_running:
 		if event is InputEventKey:
 			get_viewport().set_input_as_handled()
 		return
 
-	if (
-		not event is InputEventKey
-		or not event.is_pressed()
-		or event.is_echo()
-		or battle_session == null
-		or not battle_session.is_target_selection_active()
-	):
+	if battle_session == null:
 		return
 
-	match event.keycode:
-		KEY_UP, KEY_LEFT:
-			_move_target_focus(-1)
-			get_viewport().set_input_as_handled()
+	if (
+		_ability_menu != null
+		and _ability_menu.handle_input(event)
+	):
+		get_viewport().set_input_as_handled()
+		return
 
-		KEY_DOWN, KEY_RIGHT:
-			_move_target_focus(1)
-			get_viewport().set_input_as_handled()
+	if not battle_session.is_target_selection_active():
+		return
 
-		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
-			_confirm_focused_target()
-			get_viewport().set_input_as_handled()
+	if not event is InputEventKey:
+		return
 
-		KEY_ESCAPE:
-			battle_session.cancel_target_selection()
-			_refresh_presentation()
-			get_viewport().set_input_as_handled()
+	get_viewport().set_input_as_handled()
+
+	if not event.is_pressed() or event.is_echo():
+		return
+
+	if (
+		event.is_action_pressed("move_up")
+		or event.is_action_pressed("ui_up")
+		or event.is_action_pressed("move_left")
+		or event.is_action_pressed("ui_left")
+	):
+		_move_target_focus(-1)
+
+	elif (
+		event.is_action_pressed("move_down")
+		or event.is_action_pressed("ui_down")
+		or event.is_action_pressed("move_right")
+		or event.is_action_pressed("ui_right")
+	):
+		_move_target_focus(1)
+
+	elif (
+		event.keycode == KEY_ENTER
+		or event.keycode == KEY_KP_ENTER
+		or event.keycode == KEY_SPACE
+	):
+		_confirm_focused_target()
+
+	elif event.is_action_pressed("ui_cancel"):
+		battle_session.cancel_target_selection()
+		_refresh_presentation()
 
 func _unhandled_input(event: InputEvent) -> void:
 	## Tactical movement must not leak through to the hidden tactical scene.

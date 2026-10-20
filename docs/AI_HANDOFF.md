@@ -1,3 +1,20 @@
+# Gedeelde ability-uitvoering en protagonistcommandmenu
+
+- AbilityResolver is gedeeld door handmatige en automatische acties.
+- Hij valideert ownership, squad-targetgrenzen, ondersteuning en HP/MP-kosten.
+- Kosten en effect worden eenmaal synchroon uitgevoerd.
+- AutomaticActionResolver kiest nog steeds alleen het bestaande supportgedrag.
+- Supportdrempel en bestaande healingformules blijven intact.
+- BattleAbilityMenu toont Attack, Skills en Spells op basis van bekende IDs.
+- BattleSession begrenst protagonistcommands voorlopig tot single-enemy damage.
+- Gedeelde resolver ondersteunt ook bestaande single-ally healing.
+- Python additive damage-scaling en defense-afhandeling zijn gemigreerd.
+- Focused Strike behoudt zijn prototype-multiplier.
+- Ingredientkosten, drain, buffs, groepsacties en elemental resistances ontbreken.
+- Twee-ronden-lifecycle, results en questmeldingen blijven behouden.
+- Geen permanente nieuwe startabilities of MP-budgetten toegevoegd.
+- Teststatus: werkt
+
 # Quest-objectives, meldingen en Party Quest Log
 
 - QuestDefinition en QuestObjective zijn Resources met vaste definities.

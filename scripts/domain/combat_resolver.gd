@@ -11,23 +11,44 @@ static func calculate_physical_damage(
 
 	return maxi(1, raw_damage)
 
-
 static func calculate_skill_damage(
 	attacker: Unit,
 	defender: Unit,
 	skill: Skill
 ) -> int:
-	if skill == null:
+	if attacker == null or defender == null or skill == null:
 		return 0
 
-	if skill.effect_type != Skill.EffectType.PHYSICAL_DAMAGE:
+	if skill.effect_type not in [
+		Skill.EffectType.PHYSICAL_DAMAGE,
+		Skill.EffectType.MAGIC_DAMAGE
+	]:
 		return 0
 
-	var scaled_attack: int = roundi(attacker.attack * skill.power)
-	var raw_damage: int = scaled_attack - defender.defense
+	var effective_value: int = skill.base_value
 
-	return maxi(1, raw_damage)
+	# Preserve multiplier-based prototype abilities such as Focused Strike.
+	# Existing migrated Python abilities have power == 1.0 and use
+	# additive base-value scaling.
+	if skill.power != 1.0:
+		match skill.scaling_type:
+			Skill.ScalingType.ATTACK:
+				effective_value += roundi(attacker.attack * skill.power)
+			Skill.ScalingType.WISDOM:
+				effective_value += roundi(attacker.wisdom * skill.power)
+	else:
+		match skill.scaling_type:
+			Skill.ScalingType.ATTACK:
+				effective_value += attacker.attack
+			Skill.ScalingType.WISDOM:
+				effective_value += attacker.wisdom
+			Skill.ScalingType.FLAT:
+				pass
 
+	# Python applied defense to physical and magical damage.
+	# Godot Unit.take_damage expects damage already calculated.
+	# Elemental multipliers are not implemented yet.
+	return maxi(1, effective_value - defender.defense)
 
 static func calculate_skill_healing(
 	caster: Unit,

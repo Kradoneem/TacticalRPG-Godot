@@ -140,18 +140,15 @@ func is_target_selection_active() -> bool:
 		and not _selected_command_id.is_empty()
 	)
 
-
 func get_selected_command_text() -> String:
-	match _selected_command_id:
-		&"basic_attack":
-			return "Attack"
+	if _selected_command_id == &"basic_attack":
+		return "Attack"
 
-		&"focused_strike":
-			return "Focused Strike"
+	if _selected_command_id == &"":
+		return ""
 
-		_:
-			return "Unknown command"
-
+	var ability: Skill = SkillData.get_skill(_selected_command_id)
+	return ability.display_name if ability != null else "Unknown ability"
 
 func get_targetable_enemy_units() -> Array[Unit]:
 	var targets: Array[Unit] = []
@@ -211,16 +208,13 @@ func get_latest_log_text(maximum_lines: int = -1) -> String:
 
 	return "\n".join(lines_to_show)
 
-
 func begin_enemy_target_selection(command_id: StringName) -> void:
 	_clear_log()
 
-	if not can_accept_protagonist_command():
-		_add_log("A protagonist command cannot be selected right now.")
-		return
+	var reason: String = get_protagonist_command_reason(command_id)
 
-	if command_id != &"basic_attack" and command_id != &"focused_strike":
-		_add_log("Unknown command: %s." % command_id)
+	if not reason.is_empty():
+		_add_log(reason)
 		return
 
 	if get_targetable_enemy_units().is_empty():
@@ -230,11 +224,7 @@ func begin_enemy_target_selection(command_id: StringName) -> void:
 	_selected_command_id = command_id
 	action_step = ActionStep.TARGET_SELECTION
 
-	_add_log(
-		"Choose a target for %s."
-		% get_selected_command_text()
-	)
-
+	_add_log("Choose a target for %s." % get_selected_command_text())
 
 func cancel_target_selection() -> void:
 	if not is_target_selection_active():
@@ -415,43 +405,72 @@ func _resolve_protagonist_command(
 	enemy_target: Unit,
 	command_id: StringName
 ) -> BattleAction:
-	match command_id:
-		&"basic_attack":
-			var damage := CombatResolverData.calculate_physical_damage(
-				protagonist,
-				enemy_target
-			)
+	if (
+		protagonist == null
+		or not protagonist.is_alive()
+		or enemy_target == null
+		or not enemy_target.is_alive()
+		or not get_player_squad().contains_member(protagonist)
+		or not get_enemy_squad().contains_member(enemy_target)
+	):
+		_add_log("Actor or target is no longer available.")
+		return null
 
-			enemy_target.take_damage(damage)
+	if command_id == &"basic_attack":
+		var damage: int = CombatResolverData.calculate_physical_damage(
+			protagonist, enemy_target
+		)
 
-			var action := BattleAction.new()
-			action.configure_damage(
-				protagonist,
-				enemy_target,
-				damage,
-				"%s attacks %s for %d damage."
-				% [
-					protagonist.display_name,
-					enemy_target.display_name,
-					damage
-				]
-			)
+		enemy_target.take_damage(damage)
 
-			_add_log(action.message)
-			return action
+		var action := BattleAction.new()
+		action.configure_damage(
+			protagonist,
+			enemy_target,
+			damage,
+			"%s attacks %s for %d damage." % [
+				protagonist.display_name,
+				enemy_target.display_name,
+				damage
+			]
+		)
 
-		&"focused_strike":
-			return _resolve_damage_skill(
-				protagonist,
-				enemy_target,
-				&"focused_strike",
-				"Focused Strike"
-			)
+		_add_log(action.message)
+		return action
 
-		_:
-			_add_log("Unknown command: %s." % command_id)
-			return null
+	var ability: Skill = SkillData.get_skill(command_id)
 
+	if (
+		ability == null
+		or ability.target_type != Skill.TargetType.ENEMY_SINGLE
+		or ability.effect_type not in [
+			Skill.EffectType.PHYSICAL_DAMAGE,
+			Skill.EffectType.MAGIC_DAMAGE
+		]
+	):
+		_add_log("This ability is not supported by the command menu yet.")
+		return null
+
+	var reason: String = AbilityResolver.get_unavailable_reason(
+		protagonist, ability
+	)
+
+	if not reason.is_empty():
+		_add_log(reason)
+		return null
+
+	var resolved_action: BattleAction = AbilityResolver.resolve(
+		protagonist,
+		enemy_target,
+		ability,
+		get_player_squad(),
+		get_enemy_squad()
+	)
+
+	if resolved_action != null:
+		_add_log(resolved_action.message)
+
+	return resolved_action
 
 func _resolve_damage_skill(
 	attacker: Unit,
@@ -629,3 +648,47 @@ func _clear_log() -> void:
 
 func _add_log(message: String) -> void:
 	_latest_log.append(message)
+
+func get_protagonist_command_reason(command_id: StringName) -> String:
+	if not can_accept_protagonist_command():
+		return "A protagonist command cannot be selected right now."
+
+	var protagonist: Unit = get_protagonist()
+
+	if protagonist == null or not protagonist.is_alive():
+		return "The commander cannot act."
+
+	if command_id == &"basic_attack":
+		return ""
+
+	var ability: Skill = SkillData.get_skill(command_id)
+	var reason: String = AbilityResolver.get_unavailable_reason(
+		protagonist, ability
+	)
+
+	if not reason.is_empty():
+		return reason
+
+	# Presentation scope, not a limitation of the shared AbilityResolver.
+	if (
+		ability.target_type != Skill.TargetType.ENEMY_SINGLE
+		or ability.effect_type not in [
+			Skill.EffectType.PHYSICAL_DAMAGE,
+			Skill.EffectType.MAGIC_DAMAGE
+		]
+	):
+		return "The command menu supports single-enemy damage for now."
+
+	return ""
+
+
+func get_protagonist_ability_ids(category: Skill.Category) -> Array[StringName]:
+	var protagonist: Unit = get_protagonist()
+
+	if protagonist == null:
+		return []
+
+	if category == Skill.Category.SPELL:
+		return protagonist.get_learned_spell_ids()
+
+	return protagonist.get_learned_skill_ids()
