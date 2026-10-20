@@ -1,3 +1,23 @@
+# Quest-objectives, meldingen en Party Quest Log
+
+- QuestDefinition en QuestObjective zijn Resources met vaste definities.
+- QuestData bevat drie prototype-testquests, geen definitieve Chapter 1 lore.
+- LocationData definieert sewer_test_slice expliciet als corridor + junction.
+- Deze test-slice is niet het volledige toekomstige sewer-dungeon.
+- GameState bewaart queststatus en behaalde objective-IDs afzonderlijk.
+- Objective achievement is blijvend; quest completion is een expliciete stap.
+- Bestaande squad-/map-/locatie-clearqueries bepalen objective achievement.
+- Refresh gebeurt bij map-entry en na encounterterugkeer, niet per frame.
+- Alleen nieuwe objectivevoortgang emit een update.
+- Main bezit één blijvende niet-modale QuestUpdateBanner buiten GameLayer.
+- Meldingen wachten tijdens battle/results, Party en modal mapinteracties.
+- De wachtrij blijft behouden bij kamerwisselingen.
+- Party bevat een zelfstandig read-only Quest Log met bestaande inputisolatie.
+- Party blijft tijdens tactical alert en battle geblokkeerd.
+- Geen NPC-inlevering, questrewards, dialogue of save/load geïmplementeerd.
+- Encounter-rewards blijven afzonderlijk en worden niet door quests herhaald.
+- Teststatus: nog te bevestigen.
+
 # Encounter-results — nieuw ontwerpcontract
 
 Dit vervangt oudere dungeon-clear-only-resultregels.

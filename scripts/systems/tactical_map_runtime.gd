@@ -258,14 +258,13 @@ func _validate_saved_state(
 
 	return true
 
-
 func _refresh_entry_notice() -> void:
 	if _suspended or _party_defeated:
 		return
 
+	GameState.refresh_quest_objectives()
 	turns.refresh_notice()
 	status_changed.emit()
-
 
 func _on_turn_state_changed(_new_state: int) -> void:
 	status_changed.emit()
@@ -365,9 +364,11 @@ func _on_presentation_active_changed(active: bool) -> void:
 func finish_battle(context: Variant) -> void:
 	encounters.finish_battle(context)
 
-
 func _on_encounter_finished(_context: EncounterContext) -> void:
 	save_room_state()
+
+	# Battle/results is over. Saved mapstate now includes defeated tokens.
+	GameState.refresh_quest_objectives()
 
 	_party_defeated = not player.squad.is_alive()
 	set_suspended(false)

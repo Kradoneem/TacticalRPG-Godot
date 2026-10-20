@@ -14,6 +14,9 @@ signal squads_changed
 signal item_inventory_changed
 signal equipment_inventory_changed
 signal unit_equipment_changed(unit: Unit)
+signal quest_objective_updated(quest_id: String, objective_id: StringName)
+signal quest_log_changed
+signal quest_progress_reset
 
 var party: Array = []
 var item_inventory: Dictionary = {}
@@ -40,6 +43,10 @@ var exploration_room_states: Dictionary = {}
 ## Session state only; disk save/load is still separate.
 var defeated_enemy_squads: Dictionary = {}
 
+## Quest ID -> dictionary of achieved objective IDs.
+## Existing quest_states remains quest ID -> status string.
+var quest_objective_states: Dictionary = {}
+
 func start_new_game() -> void:
 	party = UnitDataFactory.create_chapter_one_party()
 
@@ -60,7 +67,11 @@ func start_new_game() -> void:
 
 	flags.clear()
 	quest_states.clear()
+	quest_objective_states.clear()
 	cleared_locations.clear()
+
+	quest_progress_reset.emit()
+	quest_log_changed.emit()
 
 	# Existing prototype stock, not final Chapter 1 balancing.
 	item_inventory[&"potion"] = 1
@@ -152,20 +163,51 @@ func is_location_cleared(location_id: String) -> bool:
 
 
 func activate_quest(quest_id: String) -> void:
+	var quest: QuestDefinition = QuestData.get_quest(quest_id)
+
+	if quest == null or not quest.is_valid_definition():
+		push_warning("Cannot activate unknown or invalid quest: " + quest_id)
+		return
+
+	if get_quest_status(quest_id) != "inactive":
+		return
+
+	quest_objective_states[quest_id] = {}
 	set_quest_status(quest_id, "active")
 
+	# Already satisfied objectives count when the quest is accepted.
+	refresh_quest_objectives()
 
 func complete_quest(quest_id: String) -> void:
-	set_quest_status(quest_id, "completed")
+	if get_quest_status(quest_id) != "active":
+		return
 
+	refresh_quest_objectives()
+
+	if not are_quest_objectives_achieved(quest_id):
+		return
+
+	# Explicit completion only. No automatic rewards or NPC assumptions.
+	set_quest_status(quest_id, "completed")
 
 func get_quest_status(quest_id: String) -> String:
 	return quest_states.get(quest_id, "inactive")
 
-
 func set_quest_status(quest_id: String, new_status: String) -> void:
+	if QuestData.get_quest(quest_id) == null:
+		push_warning("Unknown quest: " + quest_id)
+		return
+
+	if new_status not in ["inactive", "active", "completed"]:
+		push_warning("Unsupported quest status: " + new_status)
+		return
+
+	if get_quest_status(quest_id) == new_status:
+		return
+
 	quest_states[quest_id] = new_status
 	quest_status_changed.emit(quest_id, new_status)
+	quest_log_changed.emit()
 
 func get_item_quantity(item_id: StringName) -> int:
 	return int(item_inventory.get(item_id, 0))
@@ -524,3 +566,77 @@ func are_location_maps_cleared(required_map_ids: Array[String]) -> bool:
 			return false
 
 	return true
+
+func refresh_quest_objectives() -> void:
+	## Refresh on gameplay boundaries, not every frame.
+	## Commit all changes before emitting notifications.
+
+	var updates: Array[Dictionary] = []
+
+	for quest_id: String in QuestData.get_all_quest_ids():
+		if get_quest_status(quest_id) != "active":
+			continue
+
+		var quest: QuestDefinition = QuestData.get_quest(quest_id)
+
+		if quest == null or not quest.is_valid_definition():
+			continue
+
+		var achieved: Dictionary = quest_objective_states.get(quest_id, {})
+
+		for objective: QuestObjective in quest.objectives:
+			if bool(achieved.get(objective.objective_id, false)):
+				continue
+
+			if not objective.is_satisfied(self):
+				continue
+
+			achieved[objective.objective_id] = true
+			updates.append({
+				"quest_id": quest_id,
+				"objective_id": objective.objective_id
+			})
+
+		quest_objective_states[quest_id] = achieved
+
+	if updates.is_empty():
+		return
+
+	quest_log_changed.emit()
+
+	for update: Dictionary in updates:
+		quest_objective_updated.emit(
+			String(update["quest_id"]),
+			StringName(update["objective_id"])
+		)
+
+
+func is_quest_objective_achieved(
+	quest_id: String,
+	objective_id: StringName
+) -> bool:
+	var achieved: Dictionary = quest_objective_states.get(quest_id, {})
+	return bool(achieved.get(objective_id, false))
+
+
+func are_quest_objectives_achieved(quest_id: String) -> bool:
+	var quest: QuestDefinition = QuestData.get_quest(quest_id)
+
+	if quest == null or not quest.is_valid_definition():
+		return false
+
+	for objective: QuestObjective in quest.objectives:
+		if not is_quest_objective_achieved(quest_id, objective.objective_id):
+			return false
+
+	return true
+
+
+func get_quest_log_ids() -> Array[String]:
+	var ids: Array[String] = []
+
+	for quest_id: String in QuestData.get_all_quest_ids():
+		if get_quest_status(quest_id) != "inactive":
+			ids.append(quest_id)
+
+	return ids

@@ -43,6 +43,7 @@ var _equipment_squad: Squad
 var _equipment_unit: Unit
 var _equipment_slot: StringName = &""
 var _equipment_choices: Array[StringName] = []
+var _quest_log_panel: QuestLogPanel
 
 func _ready() -> void:
 	layer = 20
@@ -135,13 +136,19 @@ func open_for_squads(squads: Array) -> void:
 func is_open() -> bool:
 	return _is_open
 
-
 func close() -> void:
 	if not _is_open:
 		return
 
 	_is_open = false
 	_current_squad = null
+
+	if is_instance_valid(_quest_log_panel):
+		var panel: QuestLogPanel = _quest_log_panel
+		_quest_log_panel = null
+		remove_child(panel)
+		panel.queue_free()
+
 	_overlay.hide()
 	closed.emit()
 
@@ -157,7 +164,7 @@ func _show_root() -> void:
 	_equipment_slot = &""
 	_equipment_choices.clear()
 
-	_set_subtitle("Review status, manage equipment or use recovery items.")
+	_set_subtitle("Review status, equipment, items or your Quest Log.")
 	_set_hint(
 		"Navigate: WASD or arrow keys"
 		+ "   •   Confirm: Enter or Space"
@@ -184,10 +191,21 @@ func _show_root() -> void:
 		"Organise units between player squads."
 	)
 
+	# Same selection system; index 4 is intercepted by the public input
+	# handler and this button uses its own mouse callback.
+	var button := Button.new()
+	button.text = "Quest Log\nReview active quests and achieved objectives."
+	button.custom_minimum_size = Vector2(0, 82)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.focus_mode = Control.FOCUS_ALL
+	button.pressed.connect(_open_quest_log)
+	_navigation_list.add_child(button)
+	_navigation_buttons.append(button)
+
 	var overview_template: String = (
 		"%d player squad(s) are currently available.\n\n"
-		+ "Status, Equipment and single-target recovery items "
-		+ "are available.\n\nFormation remains a placeholder."
+		+ "Status, Equipment, Items and Quest Log are available.\n\n"
+		+ "Formation remains a placeholder."
 	)
 
 	_add_detail_heading("PARTY OVERVIEW")
@@ -600,17 +618,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func handle_menu_input(event: InputEvent) -> bool:
-	## Public keyboard-navigation entry point.
-	## Returns true when the open menu owns this keyboard event.
-	## Navigation and back/close behavior remain inside PartyMenu.
-
 	if not _is_open:
 		return false
+
+	if is_instance_valid(_quest_log_panel):
+		return _quest_log_panel.handle_input(event)
 
 	if not event is InputEventKey:
 		return false
 
-	# Consume releases and repeats without executing another menu action.
 	if not event.is_pressed() or event.is_echo():
 		return true
 
@@ -634,11 +650,12 @@ func handle_menu_input(event: InputEvent) -> bool:
 		_move_navigation_selection(1)
 
 	elif event.is_action_pressed("ui_accept"):
-		_activate_selected_option()
+		if _screen == Screen.ROOT and _selected_navigation_index == 4:
+			_open_quest_log()
+		else:
+			_activate_selected_option()
 
-	# Unknown keys also stay inside the open menu.
 	return true
-
 
 func _input(event: InputEvent) -> void:
 	# Run before focused Buttons handle keyboard events.
@@ -1079,3 +1096,28 @@ func _add_equipment_unit_details() -> void:
 				gear.display_name if gear != null else "(empty)"
 			]
 		)
+func _open_quest_log() -> void:
+	if not _is_open or is_instance_valid(_quest_log_panel):
+		return
+
+	_overlay.hide()
+
+	_quest_log_panel = QuestLogPanel.new()
+	add_child(_quest_log_panel)
+	_quest_log_panel.closed.connect(_close_quest_log)
+
+
+func _close_quest_log() -> void:
+	if not is_instance_valid(_quest_log_panel):
+		return
+
+	var panel: QuestLogPanel = _quest_log_panel
+	_quest_log_panel = null
+
+	# Remove immediately so another keyboard event cannot reach it.
+	remove_child(panel)
+	panel.queue_free()
+
+	if _is_open:
+		_overlay.show()
+		_show_root()

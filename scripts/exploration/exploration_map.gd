@@ -156,3 +156,17 @@ func can_open_party_menu() -> bool:
 		and not _runtime.turns.input_suspended
 		and not _runtime.encounters.is_busy()
 	)
+
+func can_show_quest_updates() -> bool:
+	if (
+		_runtime == null
+		or _combat_presentation_active
+		or _exit_interaction_active
+		or player_marker.squad == null
+		or not player_marker.squad.is_alive()
+	):
+		return false
+
+	# Allows normal exploration and a quiet alert movement-selection moment.
+	# Tactical action menus, transitions and enemy turns defer the banner.
+	return _runtime.can_open_door()
