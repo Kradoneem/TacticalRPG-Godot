@@ -13,6 +13,9 @@ enum Screen {
 	ROOT,
 	STATUS_SQUAD_SELECTION,
 	STATUS_MEMBER_INSPECTION,
+	ITEM_SELECTION,
+	ITEM_SQUAD_SELECTION,
+	ITEM_TARGET_SELECTION,
 	PLACEHOLDER
 }
 
@@ -29,6 +32,9 @@ var _selected_navigation_index: int = 0
 var _screen: Screen = Screen.ROOT
 var _is_open: bool = false
 
+var _available_item_ids: Array[StringName] = []
+var _selected_item_id: StringName = &""
+var _item_targets: Array[Unit] = []
 
 func _ready() -> void:
 	layer = 20
@@ -134,10 +140,11 @@ func close() -> void:
 func _show_root() -> void:
 	_screen = Screen.ROOT
 	_selected_navigation_index = 0
+	_selected_item_id = &""
+	_available_item_ids.clear()
+	_item_targets.clear()
 
-	_set_subtitle(
-		"Review squad status or inspect future management systems."
-	)
+	_set_subtitle("Review squad status or use recovery items.")
 	_set_hint(
 		"Navigate: WASD or arrow keys"
 		+ "   •   Confirm: Enter or Space"
@@ -157,7 +164,7 @@ func _show_root() -> void:
 	)
 	_add_navigation_button(
 		"Items",
-		"Review consumables and key items."
+		"Use recovery items on individual living squad members."
 	)
 	_add_navigation_button(
 		"Formation",
@@ -166,9 +173,8 @@ func _show_root() -> void:
 
 	var overview_template: String = (
 		"%d player squad(s) are currently available.\n\n"
-		+ "Status is available now. Equipment, Items and Formation are "
-		+ "visible navigation contracts, but their gameplay systems have "
-		+ "not been migrated yet."
+		+ "Status and single-target recovery items are available.\n\n"
+		+ "Equipment and Formation remain placeholders."
 	)
 
 	_add_detail_heading("PARTY OVERVIEW")
@@ -267,7 +273,6 @@ func _show_placeholder(
 	_add_detail_heading(section_title)
 	_add_detail_text(section_description)
 
-
 func _activate_selected_option() -> void:
 	match _screen:
 		Screen.ROOT:
@@ -283,12 +288,7 @@ func _activate_selected_option() -> void:
 						+ "start abilities and finishing abilities are added."
 					)
 				2:
-					_show_placeholder(
-						"ITEMS",
-						"Items are not migrated yet.\n\n"
-						+ "No item use, target selection or inventory "
-						+ "effects are implemented in this milestone."
-					)
+					_show_item_selection()
 				3:
 					_show_placeholder(
 						"FORMATION",
@@ -307,6 +307,27 @@ func _activate_selected_option() -> void:
 		Screen.STATUS_MEMBER_INSPECTION:
 			_refresh_member_details()
 
+		Screen.ITEM_SELECTION:
+			if (
+				_selected_navigation_index >= 0
+				and _selected_navigation_index < _available_item_ids.size()
+			):
+				_selected_item_id = _available_item_ids[
+					_selected_navigation_index
+				]
+				_show_item_squad_selection()
+
+		Screen.ITEM_SQUAD_SELECTION:
+			if (
+				_selected_navigation_index >= 0
+				and _selected_navigation_index < _available_squads.size()
+			):
+				_show_item_target_selection(
+					_available_squads[_selected_navigation_index]
+				)
+
+		Screen.ITEM_TARGET_SELECTION:
+			_use_selected_item()
 
 func _move_navigation_selection(direction: int) -> void:
 	if _navigation_buttons.is_empty():
@@ -321,9 +342,10 @@ func _move_navigation_selection(direction: int) -> void:
 
 	if _screen == Screen.STATUS_MEMBER_INSPECTION:
 		_refresh_member_details()
+	elif _screen == Screen.ITEM_TARGET_SELECTION:
+		_refresh_item_target_details()
 
 	_focus_selected_navigation_button()
-
 
 func _handle_back() -> void:
 	match _screen:
@@ -335,6 +357,15 @@ func _handle_back() -> void:
 
 		Screen.STATUS_MEMBER_INSPECTION:
 			_show_status_squad_selection()
+
+		Screen.ITEM_SELECTION:
+			_show_root()
+
+		Screen.ITEM_SQUAD_SELECTION:
+			_show_item_selection()
+
+		Screen.ITEM_TARGET_SELECTION:
+			_show_item_squad_selection()
 
 		Screen.PLACEHOLDER:
 			_show_root()
@@ -589,3 +620,200 @@ func _input(event: InputEvent) -> void:
 	# Mouse clicks still use the existing Button.pressed connections.
 	if handle_menu_input(event):
 		get_viewport().set_input_as_handled()
+
+func _show_item_selection(feedback: String = "") -> void:
+	_screen = Screen.ITEM_SELECTION
+	_selected_navigation_index = 0
+	_selected_item_id = &""
+	_item_targets.clear()
+	_available_item_ids.clear()
+
+	_set_subtitle("Select a single-target recovery item.")
+	_set_hint(
+		"Navigate: WASD or arrow keys"
+		+ "   •   Confirm: Enter or Space"
+		+ "   •   Back: Escape"
+	)
+
+	_clear_navigation()
+	_clear_details()
+
+	for item_id: StringName in ItemData.get_all_item_ids():
+		var quantity: int = GameState.get_item_quantity(item_id)
+
+		if quantity <= 0:
+			continue
+
+		var item: GameItem = ItemData.get_item(item_id)
+
+		_available_item_ids.append(item_id)
+		_add_navigation_button(
+			"%s × %d" % [item.display_name, quantity],
+			item.description
+		)
+
+	if not feedback.is_empty():
+		_add_detail_heading("ITEM RESULT")
+		_add_detail_text(feedback)
+
+	if _available_item_ids.is_empty():
+		_add_detail_heading("EMPTY INVENTORY")
+		_add_detail_text("No usable items remain.")
+	else:
+		_add_detail_heading("RECOVERY ITEMS")
+		_add_detail_text(
+			"Choose an item, then a squad and one living member.\n\n"
+			+ "Escape cancels without consuming an item.\n\n"
+			+ "Confirming use consumes one item, even if the "
+			+ "selected member is already fully restored."
+		)
+
+	_refresh_navigation_selection()
+	call_deferred("_focus_selected_navigation_button")
+
+
+func _show_item_squad_selection() -> void:
+	var item: GameItem = ItemData.get_item(_selected_item_id)
+
+	if item == null:
+		_show_item_selection("Unknown item.")
+		return
+
+	_screen = Screen.ITEM_SQUAD_SELECTION
+	_selected_navigation_index = 0
+	_item_targets.clear()
+
+	_set_subtitle(
+		"%s — choose the target's squad." % item.display_name
+	)
+	_set_hint(
+		"Navigate: WASD or arrow keys"
+		+ "   •   Confirm: Enter or Space"
+		+ "   •   Back: Escape"
+	)
+
+	_clear_navigation()
+	_clear_details()
+
+	for squad: Squad in _available_squads:
+		_add_navigation_button(
+			squad.display_name,
+			"%d living member(s)" % squad.get_living_members().size()
+		)
+
+	_add_detail_heading(item.display_name)
+	_add_detail_text(item.description)
+	_add_detail_text(
+		"Selecting a squad does not use the item. "
+		+ "Choose one individual member next."
+	)
+
+	_refresh_navigation_selection()
+	call_deferred("_focus_selected_navigation_button")
+
+
+func _show_item_target_selection(squad: Squad) -> void:
+	var item: GameItem = ItemData.get_item(_selected_item_id)
+
+	if item == null or squad == null:
+		_show_item_selection()
+		return
+
+	_screen = Screen.ITEM_TARGET_SELECTION
+	_selected_navigation_index = 0
+	_item_targets = squad.get_living_members()
+
+	_set_subtitle(
+		"%s — choose one member of %s." % [
+			item.display_name,
+			squad.display_name
+		]
+	)
+	_set_hint(
+		"Navigate: WASD or arrow keys"
+		+ "   •   Use item: Enter or Space"
+		+ "   •   Back: Escape"
+	)
+
+	_clear_navigation()
+	_clear_details()
+
+	for member: Unit in _item_targets:
+		_add_navigation_button(
+			member.display_name,
+			"HP %d/%d  •  MP %d/%d" % [
+				member.hp,
+				member.max_hp,
+				member.mp,
+				member.max_mp
+			]
+		)
+
+	_refresh_item_target_details()
+	_refresh_navigation_selection()
+	call_deferred("_focus_selected_navigation_button")
+
+
+func _refresh_item_target_details() -> void:
+	_clear_details()
+
+	var item: GameItem = ItemData.get_item(_selected_item_id)
+
+	if item == null:
+		return
+
+	_add_detail_heading(item.display_name)
+	_add_detail_text(item.description)
+
+	if _item_targets.is_empty():
+		_add_detail_text(
+			"This squad has no living targets. "
+			+ "Press Escape to choose another squad."
+		)
+		return
+
+	if (
+		_selected_navigation_index < 0
+		or _selected_navigation_index >= _item_targets.size()
+	):
+		return
+
+	var target: Unit = _item_targets[_selected_navigation_index]
+
+	_add_detail_heading(target.display_name)
+	_add_detail_text(
+		"HP %d/%d\nMP %d/%d\n\nConfirm to consume one %s." % [
+			target.hp,
+			target.max_hp,
+			target.mp,
+			target.max_mp,
+			item.display_name
+		]
+	)
+
+
+func _use_selected_item() -> void:
+	if (
+		_selected_item_id == &""
+		or _selected_navigation_index < 0
+		or _selected_navigation_index >= _item_targets.size()
+	):
+		return
+
+	var item: GameItem = ItemData.get_item(_selected_item_id)
+
+	if item == null:
+		_show_item_selection("Unknown item.")
+		return
+
+	var target: Unit = _item_targets[_selected_navigation_index]
+	var result: Dictionary = GameState.use_item(_selected_item_id, target)
+
+	var feedback: String = str(
+		result.get("message", "Item use failed.")
+	)
+
+	if bool(result.get("success", false)):
+		feedback = "%s used.\n%s" % [item.display_name, feedback]
+
+	_show_item_selection(feedback)

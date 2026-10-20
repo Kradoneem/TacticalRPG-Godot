@@ -11,10 +11,11 @@ signal day_advanced(new_day: float, reason: String)
 signal flag_changed(flag_id: String, enabled: bool)
 signal quest_status_changed(quest_id: String, new_status: String)
 signal squads_changed
+signal item_inventory_changed
 
 var party: Array = []
 var equipment_inventory: Array = []
-var item_inventory: Array = []
+var item_inventory: Dictionary = {}
 var squads: Array = []
 
 var chapter: int = 1
@@ -32,7 +33,6 @@ var cleared_locations: Dictionary = {}
 
 ## Session persistence only: not disk save/load.
 var exploration_room_states: Dictionary = {}
-
 
 func start_new_game() -> void:
 	party = UnitDataFactory.create_chapter_one_party()
@@ -55,13 +55,19 @@ func start_new_game() -> void:
 	quest_states.clear()
 	cleared_locations.clear()
 
+	# Python prototype stock, excluding Group Potion.
+	item_inventory[&"potion"] = 1
+	item_inventory[&"hi_potion"] = 1
+	item_inventory[&"ether"] = 1
+	item_inventory[&"elixir"] = 1
+
 	create_chapter_one_main_squad()
+	item_inventory_changed.emit()
 
 	var main_squad = get_main_squad()
 
 	if main_squad != null:
 		print("New game ready: %s" % main_squad.get_summary())
-
 
 func create_chapter_one_main_squad() -> void:
 	if party.size() < 2:
@@ -147,3 +153,71 @@ func get_quest_status(quest_id: String) -> String:
 func set_quest_status(quest_id: String, new_status: String) -> void:
 	quest_states[quest_id] = new_status
 	quest_status_changed.emit(quest_id, new_status)
+
+func get_item_quantity(item_id: StringName) -> int:
+	return int(item_inventory.get(item_id, 0))
+
+
+func add_item(item_id: StringName, amount: int = 1) -> bool:
+	if amount <= 0:
+		return false
+
+	if ItemData.get_item(item_id) == null:
+		push_warning("Cannot add unknown item: %s" % item_id)
+		return false
+
+	item_inventory[item_id] = get_item_quantity(item_id) + amount
+	item_inventory_changed.emit()
+
+	return true
+
+
+func use_item(item_id: StringName, target: Unit) -> Dictionary:
+	var quantity: int = get_item_quantity(item_id)
+
+	if quantity <= 0:
+		return {
+			"success": false,
+			"message": "This item is not in inventory."
+		}
+
+	var item: GameItem = ItemData.get_item(item_id)
+
+	if item == null:
+		return {
+			"success": false,
+			"message": "Unknown item."
+		}
+
+	if target == null:
+		return {
+			"success": false,
+			"message": "No target selected."
+		}
+
+	var target_squad: Squad = get_squad_of(target)
+
+	if (
+		target_squad == null
+		or target_squad.autonomy_mode == Squad.AutonomyMode.ENEMY
+	):
+		return {
+			"success": false,
+			"message": "Choose a member of a player squad."
+		}
+
+	var result: Dictionary = ItemUseResolver.resolve(item, target)
+
+	if not bool(result.get("success", false)):
+		return result
+
+	# Synchronous: no await between validation, effects and consumption.
+	# One use consumes one item, regardless of the number of effects.
+	if quantity == 1:
+		item_inventory.erase(item_id)
+	else:
+		item_inventory[item_id] = quantity - 1
+
+	item_inventory_changed.emit()
+
+	return result
