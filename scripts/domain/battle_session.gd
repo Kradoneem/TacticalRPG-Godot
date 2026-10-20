@@ -39,12 +39,26 @@ var _main_squad_member_index: int = 0
 var _enemy_squad_member_index: int = 0
 
 
-func _init(new_encounter_context: EncounterContext) -> void:
+func _init(
+	new_encounter_context: EncounterContext,
+	clock: GameplayClock = null
+) -> void:
 	encounter_context = new_encounter_context
+	_gameplay_clock = clock
 
 	if encounter_context != null:
 		maximum_rounds = maxi(1, encounter_context.maximum_rounds)
 
+	# Compatibility bridge for existing BattleSession.new(context) callers.
+	# Resolve the Autoload at runtime, not through a compile-time identifier.
+	if _gameplay_clock == null:
+		var tree: SceneTree = Engine.get_main_loop() as SceneTree
+
+		if tree != null:
+			var game_state: Node = tree.root.get_node_or_null("GameState")
+
+			if game_state != null:
+				_gameplay_clock = game_state.get("gameplay_clock") as GameplayClock
 
 func begin_battle() -> void:
 	_clear_log()
@@ -209,6 +223,7 @@ func get_latest_log_text(maximum_lines: int = -1) -> String:
 	return "\n".join(lines_to_show)
 
 func begin_enemy_target_selection(command_id: StringName) -> void:
+	begin_target_selection(command_id)
 	_clear_log()
 
 	var reason: String = get_protagonist_command_reason(command_id)
@@ -239,47 +254,15 @@ func cancel_target_selection() -> void:
 
 func confirm_enemy_target(target_unit_id: String) -> BattleAction:
 	if not is_target_selection_active():
-		_add_log("No target selection is currently active.")
 		return null
 
-	var protagonist := get_protagonist()
-	var enemy_target := _find_living_enemy_by_id(target_unit_id)
+	if _selected_command_id != &"basic_attack":
+		var ability: Skill = SkillData.get_skill(_selected_command_id)
 
-	if protagonist == null or enemy_target == null:
-		_selected_command_id = &""
-		action_step = ActionStep.PROTAGONIST_COMMAND
+		if ability == null or ability.target_type != Skill.TargetType.ENEMY_SINGLE:
+			return null
 
-		_clear_log()
-		_add_log("That target is no longer available.")
-		return null
-
-	var selected_command := _selected_command_id
-
-	_clear_log()
-
-	var resolved_action := _resolve_protagonist_command(
-		protagonist,
-		enemy_target,
-		selected_command
-	)
-
-	if resolved_action == null:
-		_selected_command_id = &""
-		action_step = ActionStep.PROTAGONIST_COMMAND
-		_add_log("Command was not resolved. Choose another command.")
-		return null
-
-	_selected_command_id = &""
-
-	if _finish_if_required():
-		return resolved_action
-
-	_main_squad_member_index = 0
-	_enemy_squad_member_index = 0
-	action_step = ActionStep.MAIN_SQUAD_AUTOMATIC
-
-	return resolved_action
-
+	return confirm_target(target_unit_id)
 
 func resolve_next_automatic_action() -> BattleAction:
 	if action_step == ActionStep.MAIN_SQUAD_AUTOMATIC:
@@ -402,75 +385,69 @@ func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 
 func _resolve_protagonist_command(
 	protagonist: Unit,
-	enemy_target: Unit,
+	target: Unit,
 	command_id: StringName
 ) -> BattleAction:
 	if (
-		protagonist == null
+		not is_valid()
+		or protagonist == null
 		or not protagonist.is_alive()
-		or enemy_target == null
-		or not enemy_target.is_alive()
+		or target == null
+		or not target.is_alive()
 		or not get_player_squad().contains_member(protagonist)
-		or not get_enemy_squad().contains_member(enemy_target)
 	):
-		_add_log("Actor or target is no longer available.")
 		return null
 
 	if command_id == &"basic_attack":
+		if not get_enemy_squad().contains_member(target):
+			return null
+
 		var damage: int = CombatResolverData.calculate_physical_damage(
-			protagonist, enemy_target
+			protagonist, target
 		)
+		target.take_damage(damage)
 
-		enemy_target.take_damage(damage)
-
-		var action := BattleAction.new()
-		action.configure_damage(
+		var attack_action := BattleAction.new()
+		attack_action.configure_damage(
 			protagonist,
-			enemy_target,
+			target,
 			damage,
 			"%s attacks %s for %d damage." % [
 				protagonist.display_name,
-				enemy_target.display_name,
+				target.display_name,
 				damage
 			]
 		)
-
-		_add_log(action.message)
-		return action
+		_add_log(attack_action.message)
+		return attack_action
 
 	var ability: Skill = SkillData.get_skill(command_id)
 
+	if ability == null or ability.effect_type == Skill.EffectType.HEAL:
+		return null
+
 	if (
-		ability == null
-		or ability.target_type != Skill.TargetType.ENEMY_SINGLE
-		or ability.effect_type not in [
-			Skill.EffectType.PHYSICAL_DAMAGE,
-			Skill.EffectType.MAGIC_DAMAGE
-		]
+		ability.effect_type == Skill.EffectType.BUFF
+		and _gameplay_clock == null
 	):
-		_add_log("This ability is not supported by the command menu yet.")
+		_add_log("Buff command requires a gameplay clock.")
 		return null
 
-	var reason: String = AbilityResolver.get_unavailable_reason(
-		protagonist, ability
-	)
-
-	if not reason.is_empty():
-		_add_log(reason)
-		return null
-
-	var resolved_action: BattleAction = AbilityResolver.resolve(
+	var action: BattleAction = AbilityResolver.resolve(
 		protagonist,
-		enemy_target,
+		target,
 		ability,
 		get_player_squad(),
-		get_enemy_squad()
+		get_enemy_squad(),
+		_gameplay_clock
 	)
 
-	if resolved_action != null:
-		_add_log(resolved_action.message)
+	if action != null:
+		_add_log(action.message)
 
-	return resolved_action
+	return action
+
+var _gameplay_clock: GameplayClock
 
 func _resolve_damage_skill(
 	attacker: Unit,
@@ -669,18 +646,14 @@ func get_protagonist_command_reason(command_id: StringName) -> String:
 	if not reason.is_empty():
 		return reason
 
-	# Presentation scope, not a limitation of the shared AbilityResolver.
-	if (
-		ability.target_type != Skill.TargetType.ENEMY_SINGLE
-		or ability.effect_type not in [
-			Skill.EffectType.PHYSICAL_DAMAGE,
-			Skill.EffectType.MAGIC_DAMAGE
-		]
-	):
-		return "The command menu supports single-enemy damage for now."
+	# This milestone exposes damage and Attack buffs, not manual healing yet.
+	if ability.effect_type == Skill.EffectType.HEAL:
+		return "Manual healing is not available in this command menu yet."
+
+	if _get_targets_for_command(command_id).is_empty():
+		return "No valid targets for this command."
 
 	return ""
-
 
 func get_protagonist_ability_ids(category: Skill.Category) -> Array[StringName]:
 	var protagonist: Unit = get_protagonist()
@@ -692,3 +665,102 @@ func get_protagonist_ability_ids(category: Skill.Category) -> Array[StringName]:
 		return protagonist.get_learned_spell_ids()
 
 	return protagonist.get_learned_skill_ids()
+
+func _get_targets_for_command(command_id: StringName) -> Array[Unit]:
+	var targets: Array[Unit] = []
+
+	if not is_valid():
+		return targets
+
+	if command_id == &"basic_attack":
+		return get_enemy_squad().get_living_members()
+
+	var ability: Skill = SkillData.get_skill(command_id)
+
+	if ability == null:
+		return targets
+
+	var candidates: Array[Unit] = []
+
+	match ability.target_type:
+		Skill.TargetType.ENEMY_SINGLE:
+			candidates = get_enemy_squad().get_living_members()
+		Skill.TargetType.ALLY_SINGLE:
+			candidates = get_player_squad().get_living_members()
+		_:
+			return targets
+
+	for candidate: Unit in candidates:
+		if AbilityResolver.get_target_error(
+			get_protagonist(),
+			candidate,
+			ability,
+			get_player_squad(),
+			get_enemy_squad()
+		).is_empty():
+			targets.append(candidate)
+
+	return targets
+
+
+func get_selected_targets() -> Array[Unit]:
+	if not is_target_selection_active():
+		return []
+
+	return _get_targets_for_command(_selected_command_id)
+
+
+func begin_target_selection(command_id: StringName) -> void:
+	_clear_log()
+
+	var reason: String = get_protagonist_command_reason(command_id)
+
+	if not reason.is_empty():
+		_add_log(reason)
+		return
+
+	if _get_targets_for_command(command_id).is_empty():
+		_add_log("No valid targets for this command.")
+		return
+
+	_selected_command_id = command_id
+	action_step = ActionStep.TARGET_SELECTION
+	_add_log("Choose a target for %s." % get_selected_command_text())
+
+
+func confirm_target(target_unit_id: String) -> BattleAction:
+	if not is_target_selection_active():
+		return null
+
+	var selected_target: Unit = null
+
+	for candidate: Unit in get_selected_targets():
+		if candidate.unit_id == target_unit_id:
+			selected_target = candidate
+			break
+
+	if selected_target == null:
+		_add_log("That target is no longer available.")
+		return null
+
+	_clear_log()
+
+	var action: BattleAction = _resolve_protagonist_command(
+		get_protagonist(), selected_target, _selected_command_id
+	)
+
+	if action == null:
+		_selected_command_id = &""
+		action_step = ActionStep.PROTAGONIST_COMMAND
+		_add_log("Command was not resolved. Choose another command.")
+		return null
+
+	_selected_command_id = &""
+
+	if _finish_if_required():
+		return action
+
+	_main_squad_member_index = 0
+	_enemy_squad_member_index = 0
+	action_step = ActionStep.MAIN_SQUAD_AUTOMATIC
+	return action

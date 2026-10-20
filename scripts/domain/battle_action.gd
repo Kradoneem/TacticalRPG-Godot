@@ -10,7 +10,8 @@ enum Type {
 	NONE,
 	PHYSICAL_DAMAGE,
 	SKILL_DAMAGE,
-	HEALING
+	HEALING,
+	BUFF
 }
 
 var action_type: Type = Type.NONE
@@ -66,3 +67,17 @@ func is_valid() -> bool:
 		and target != null
 		and applied_amount > 0
 	)
+
+func configure_buff(
+	new_actor: Unit,
+	new_target: Unit,
+	bonus: int,
+	action_message: String,
+	new_skill: Skill
+) -> void:
+	action_type = Type.BUFF
+	actor = new_actor
+	target = new_target
+	skill = new_skill
+	applied_amount = bonus
+	message = action_message

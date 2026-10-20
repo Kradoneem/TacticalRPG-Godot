@@ -30,9 +30,17 @@ var max_hp: int:
 
 var attack: int:
 	get:
-		return base_attack + get_equipment_bonus(&"attack")
+		return (
+			base_attack
+			+ get_equipment_bonus(&"attack")
+			+ get_attack_buff_bonus()
+		)
 	set(value):
-		base_attack = value - get_equipment_bonus(&"attack")
+		base_attack = (
+			value
+			- get_equipment_bonus(&"attack")
+			- get_attack_buff_bonus()
+		)
 
 var defense: int:
 	get:
@@ -61,6 +69,7 @@ var equipment: Dictionary:
 
 var learned_skills: Array[StringName] = []
 var learned_spells: Array[StringName] = []
+var _attack_buffs: Dictionary = {}
 
 
 func _init(
@@ -308,3 +317,57 @@ func get_summary() -> String:
 		mp,
 		max_mp
 	]
+
+func apply_attack_buff(
+	definition: AttackBuffData,
+	caster_wisdom: int,
+	clock: GameplayClock
+) -> bool:
+	if (
+		definition == null
+		or not definition.is_valid_definition()
+		or clock == null
+		or not is_alive()
+	):
+		return false
+
+	# Same buff ID replaces bonus and restarts duration, across casters.
+	_attack_buffs[definition.buff_id] = ActiveAttackBuff.new(
+		definition, caster_wisdom, clock
+	)
+	return true
+
+
+func get_attack_buff_bonus() -> int:
+	var total: int = 0
+
+	# Lazy removal also works for Units on unloaded/retained maps.
+	for buff_id in _attack_buffs.keys():
+		var buff: ActiveAttackBuff = _attack_buffs[buff_id]
+
+		if not buff.is_active():
+			_attack_buffs.erase(buff_id)
+			continue
+
+		total += buff.attack_bonus
+
+	return total
+
+
+func get_attack_buff_summary() -> String:
+	var lines: Array[String] = []
+
+	for buff_id in _attack_buffs.keys():
+		var buff: ActiveAttackBuff = _attack_buffs[buff_id]
+
+		if not buff.is_active():
+			_attack_buffs.erase(buff_id)
+			continue
+
+		lines.append("%s: ATK +%d (%d ticks)" % [
+			buff.display_name,
+			buff.attack_bonus,
+			buff.get_remaining_ticks()
+		])
+
+	return ", ".join(lines)

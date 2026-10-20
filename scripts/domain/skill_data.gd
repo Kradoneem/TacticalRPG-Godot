@@ -1,15 +1,14 @@
 class_name SkillData
-
 extends RefCounted
 
-## Central ability definitions.
-## Every call returns a fresh, immutable Skill definition.
+## Central ability catalog.
+## Returns fresh definitions; callers treat them as read-only.
+## Applied effects and learned ability IDs belong to Unit.
+
 
 static func get_skill(skill_id: StringName) -> Skill:
 	match skill_id:
-		## ---------------------------------------------------------
-		## Current Chapter 1 prototype abilities
-		## ---------------------------------------------------------
+		# Current Chapter 1 prototype abilities.
 
 		&"focused_strike":
 			return Skill.new(
@@ -62,9 +61,7 @@ static func get_skill(skill_id: StringName) -> Skill:
 				1.25
 			)
 
-		## ---------------------------------------------------------
-		## Migrated Python spells
-		## ---------------------------------------------------------
+		# Migrated Python spells.
 
 		&"heal":
 			return Skill.new(
@@ -149,9 +146,7 @@ static func get_skill(skill_id: StringName) -> Skill:
 				[&"light"]
 			)
 
-		## ---------------------------------------------------------
-		## Migrated Python skills
-		## ---------------------------------------------------------
+		# Migrated Python skills.
 
 		&"power_strike":
 			return Skill.new(
@@ -194,12 +189,29 @@ static func get_skill(skill_id: StringName) -> Skill:
 				Skill.ScalingType.FLAT
 			)
 
+		# New single-ally Attack buff.
+
+		&"attack_support":
+			var ability: Skill = Skill.new(
+				&"attack_support",
+				"Attack Support",
+				"Give one living ally +3 Attack. Duration depends on caster Wisdom.",
+				Skill.Category.SKILL,
+				Skill.EffectType.BUFF,
+				Skill.TargetType.ALLY_SINGLE,
+				4,
+				0
+			)
+
+			ability.attack_buff = AttackBuffData.new()
+			return ability
+
 		_:
 			push_warning(
-				"SkillData could not find ability: %s."
-				% skill_id
+				"SkillData could not find ability: %s." % skill_id
 			)
 			return null
+
 
 static func get_all_ability_ids() -> Array[StringName]:
 	return [
@@ -214,25 +226,28 @@ static func get_all_ability_ids() -> Array[StringName]:
 		&"holy_light",
 		&"power_strike",
 		&"provoke",
-		&"battle_cry"
+		&"battle_cry",
+		&"attack_support"
 	]
+
 
 static func get_all_skill_ids() -> Array[StringName]:
 	var skill_ids: Array[StringName] = []
 
 	for ability_id: StringName in get_all_ability_ids():
-		var ability := get_skill(ability_id)
+		var ability: Skill = get_skill(ability_id)
 
 		if ability != null and ability.is_skill():
 			skill_ids.append(ability_id)
 
 	return skill_ids
 
+
 static func get_all_spell_ids() -> Array[StringName]:
 	var spell_ids: Array[StringName] = []
 
 	for ability_id: StringName in get_all_ability_ids():
-		var ability := get_skill(ability_id)
+		var ability: Skill = get_skill(ability_id)
 
 		if ability != null and ability.is_spell():
 			spell_ids.append(ability_id)

@@ -1,14 +1,13 @@
 class_name AbilityResolver
 extends RefCounted
 
-## Shared ability execution for player-selected and automatic actions.
-## Knows no UI, protagonist rules, strategy or turn order.
+## Shared execution for manual and automatic abilities.
+## Turn ownership and AI choice remain outside this resolver.
 
 const CombatRules = preload("res://scripts/domain/combat_resolver.gd")
 
 
 static func get_unavailable_reason(actor: Unit, ability: Skill) -> String:
-	## Actor/definition/cost validation without selecting a target.
 	if actor == null or not actor.is_alive():
 		return "The actor cannot act."
 
@@ -31,7 +30,14 @@ static func get_unavailable_reason(actor: Unit, ability: Skill) -> String:
 		and ability.target_type == Skill.TargetType.ALLY_SINGLE
 	)
 
-	if not damage_supported and not healing_supported:
+	var buff_supported: bool = (
+		ability.effect_type == Skill.EffectType.BUFF
+		and ability.target_type == Skill.TargetType.ALLY_SINGLE
+		and ability.attack_buff != null
+		and ability.attack_buff.is_valid_definition()
+	)
+
+	if not damage_supported and not healing_supported and not buff_supported:
 		return "This ability effect or target type is not implemented yet."
 
 	if ability.scaling_type not in [
@@ -41,8 +47,6 @@ static func get_unavailable_reason(actor: Unit, ability: Skill) -> String:
 	]:
 		return "Unsupported ability scaling."
 
-	# Python ingredients are component types, not ordinary item IDs.
-	# Do not silently reinterpret that data as the current inventory.
 	if not ability.item_costs.is_empty():
 		return "Ingredient costs are not implemented yet."
 
@@ -52,7 +56,6 @@ static func get_unavailable_reason(actor: Unit, ability: Skill) -> String:
 	if actor.mp < ability.mp_cost:
 		return "Not enough MP: %d required." % ability.mp_cost
 
-	# Existing Python rule: paying HP cannot defeat the actor.
 	if ability.hp_cost > 0 and actor.hp <= ability.hp_cost:
 		return "Not enough HP: more than %d required." % ability.hp_cost
 
@@ -88,7 +91,11 @@ static func get_target_error(
 			if not owning_squad.contains_member(target):
 				return "Choose a member of the actor's squad."
 
-			if target.hp >= target.max_hp:
+			# Full HP blocks healing, not buffs.
+			if (
+				ability.effect_type == Skill.EffectType.HEAL
+				and target.hp >= target.max_hp
+			):
 				return "This target needs no healing."
 
 		_:
@@ -102,7 +109,8 @@ static func resolve(
 	target: Unit,
 	ability: Skill,
 	owning_squad: Squad,
-	opposing_squad: Squad = null
+	opposing_squad: Squad = null,
+	clock: GameplayClock = null
 ) -> BattleAction:
 	if not get_unavailable_reason(actor, ability).is_empty():
 		return null
@@ -112,18 +120,46 @@ static func resolve(
 	).is_empty():
 		return null
 
-	var amount: int
+	if ability.effect_type == Skill.EffectType.BUFF:
+		if clock == null:
+			return null
 
-	if ability.effect_type == Skill.EffectType.HEAL:
-		amount = CombatRules.calculate_skill_healing(actor, ability)
-	else:
-		amount = CombatRules.calculate_skill_damage(actor, target, ability)
+		# Duration snapshots caster Wisdom before applying the effect.
+		var duration: int = ability.attack_buff.get_duration(actor.wisdom)
+
+		if not target.apply_attack_buff(
+			ability.attack_buff, actor.wisdom, clock
+		):
+			return null
+
+		actor.mp -= ability.mp_cost
+		actor.hp -= ability.hp_cost
+
+		var buff_action := BattleAction.new()
+		buff_action.configure_buff(
+			actor,
+			target,
+			ability.attack_buff.attack_bonus,
+			"%s uses %s on %s: ATK +%d for %d ticks." % [
+				actor.display_name,
+				ability.display_name,
+				target.display_name,
+				ability.attack_buff.attack_bonus,
+				duration
+			],
+			ability
+		)
+		return buff_action
+
+	var amount: int = (
+		CombatRules.calculate_skill_healing(actor, ability)
+		if ability.effect_type == Skill.EffectType.HEAL
+		else CombatRules.calculate_skill_damage(actor, target, ability)
+	)
 
 	if amount <= 0:
 		return null
 
-	# Synchronous transaction: validate everything before any mutation.
-	# No await or external signals between costs and effect.
 	actor.mp -= ability.mp_cost
 	actor.hp -= ability.hp_cost
 
@@ -131,7 +167,6 @@ static func resolve(
 
 	if ability.effect_type == Skill.EffectType.HEAL:
 		var applied_healing: int = target.heal(amount)
-
 		action.configure_healing(
 			actor,
 			target,
@@ -146,7 +181,6 @@ static func resolve(
 		)
 	else:
 		target.take_damage(amount)
-
 		action.configure_damage(
 			actor,
 			target,

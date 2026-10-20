@@ -33,6 +33,7 @@ var input_suspended: bool = false
 var _turn_order: Array[Node] = []
 var _turn_index: int = -1
 var _reachable_player_cells: Array[Vector2i] = []
+var _round_open: bool = false
 
 
 func configure(
@@ -143,20 +144,11 @@ func begin_battle_transition() -> void:
 
 	state_changed.emit(state)
 
-
 func resume_after_player_action() -> void:
 	if state != State.BATTLE_TRANSITION:
 		return
 
-	# Refresh before visiting the old round snapshot:
-	# the final enemy might have been defeated during presentation.
-	_refresh_alert_state()
-
-	if is_free_exploration():
-		return
-
-	_advance_to_next_turn()
-
+	_finish_tactical_turn()
 
 func _on_player_movement_requested(direction: Vector2i) -> void:
 	if input_suspended or state != State.FREE_EXPLORATION:
@@ -170,9 +162,10 @@ func _on_player_movement_requested(direction: Vector2i) -> void:
 	if not player_marker.move_by(direction):
 		return
 
+	GameState.gameplay_clock.record_exploration_step()
+
 	_advance_free_exploration_patrols()
 	_refresh_alert_state()
-
 
 func _advance_free_exploration_patrols() -> void:
 	for enemy_marker: TacticalEnemy in enemy_markers:
@@ -275,22 +268,18 @@ func _begin_alert_state() -> void:
 	state_changed.emit(state)
 	_start_new_alert_round()
 
-
 func _end_alert_state() -> void:
 	print("No enemy squads remain alert. Free exploration resumed.")
 
 	state = State.FREE_EXPLORATION
+	_round_open = false
 	_turn_order.clear()
 	_turn_index = -1
 	_reachable_player_cells.clear()
 
 	tactical_cursor.end_selection()
-
-	# Resuming exploration must not bypass a door/presentation input lock.
 	player_marker.set_input_enabled(not input_suspended)
-
 	state_changed.emit(state)
-
 
 func _start_new_alert_round() -> void:
 	_refresh_alert_state()
@@ -310,14 +299,13 @@ func _start_new_alert_round() -> void:
 		if enemy_marker.is_defeated():
 			continue
 
-		# Every living enemy gets a turn during global alert.
 		_turn_order.append(enemy_marker)
 
 	_turn_order.sort_custom(_sort_turn_actors)
 	_turn_index = -1
+	_round_open = true
 
 	_advance_to_next_turn()
-
 
 func _sort_turn_actors(left_actor: Node, right_actor: Node) -> bool:
 	if left_actor == right_actor:
@@ -468,24 +456,16 @@ func _open_tactical_action_menu_if_possible() -> bool:
 
 	return true
 
-
 func _end_player_turn() -> void:
-	if (
-		state != State.ALERT_PLAYER_MOVEMENT_SELECTION
-		and state != State.TACTICAL_ACTION_MENU
-	):
+	if state not in [
+		State.ALERT_PLAYER_MOVEMENT_SELECTION,
+		State.TACTICAL_ACTION_MENU
+	]:
 		return
 
 	tactical_cursor.end_selection()
 	remaining_player_movement = 0
-
-	_refresh_alert_state()
-
-	if state == State.FREE_EXPLORATION:
-		return
-
-	_advance_to_next_turn()
-
+	_finish_tactical_turn()
 
 func _is_enemy_occupying(target_cell: Vector2i) -> bool:
 	for enemy_marker: TacticalEnemy in enemy_markers:
@@ -520,11 +500,9 @@ func _is_enemy_occupying_by_other_enemy(
 
 	return false
 
-
 func _begin_enemy_turn(active_enemy_marker: TacticalEnemy) -> void:
-	# Battle can defeat an actor still present in this round's turn order.
 	if active_enemy_marker.is_defeated():
-		_advance_to_next_turn()
+		_finish_tactical_turn()
 		return
 
 	state = State.ALERT_ENEMY_TURNS
@@ -535,22 +513,44 @@ func _begin_enemy_turn(active_enemy_marker: TacticalEnemy) -> void:
 	enemy_turn_started.emit(active_enemy_marker)
 
 	if active_enemy_marker.ai_mode == TacticalEnemy.AiMode.PATROL:
-		var next_cell: Vector2i = (
-			active_enemy_marker.get_next_patrol_cell()
-		)
+		var next_cell: Vector2i = active_enemy_marker.get_next_patrol_cell()
 
 		if (
 			next_cell != player_marker.cell
 			and not _is_enemy_occupying_by_other_enemy(
-				next_cell,
-				active_enemy_marker
+				next_cell, active_enemy_marker
 			)
 		):
 			active_enemy_marker.advance_patrol()
 
+	_finish_tactical_turn()
+
+func _finish_tactical_turn() -> void:
+	# Remaining entries are the current round snapshot, not a new round.
+	var remaining_actor: bool = false
+
+	for index in range(_turn_index + 1, _turn_order.size()):
+		var actor: Node = _turn_order[index]
+
+		if not is_instance_valid(actor):
+			continue
+
+		if actor == player_marker and player_marker.squad.is_alive():
+			remaining_actor = true
+			break
+
+		if actor is TacticalEnemy and not (actor as TacticalEnemy).is_defeated():
+			remaining_actor = true
+			break
+
+	if _round_open and not remaining_actor:
+		# Close before emitting clock notifications; never tick twice.
+		_round_open = false
+		GameState.gameplay_clock.complete_tactical_round()
+
 	_refresh_alert_state()
 
-	if state == State.FREE_EXPLORATION:
+	if is_free_exploration():
 		return
 
 	_advance_to_next_turn()

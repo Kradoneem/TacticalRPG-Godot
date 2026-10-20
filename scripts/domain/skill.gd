@@ -60,6 +60,8 @@ var base_value: int
 ## This will disappear when CombatResolver is migrated to ScalingType.
 var power: float
 
+## Optional Attack-buff definition; runtime state belongs to Unit.
+var attack_buff: AttackBuffData
 
 func _init(
 	new_skill_id: StringName,

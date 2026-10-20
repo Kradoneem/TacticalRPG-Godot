@@ -1,3 +1,28 @@
+# Gameplayklok en Attack Support-buff
+
+- GameState bezit één GameplayClock per gamesessie; geen realtime Timer.
+- Een volledig afgehandelde tactical ronde geeft één tick.
+- Niet-volledige afgebroken tactical rondes geven geen tick.
+- Defeated actors in het rondesnapshot hebben geen resterende beurt.
+- Side-view acties, rondes, resultaten en animaties geven geen ticks.
+- Exploration telt alleen geldige Main Squad-stappen.
+- Movementquotum wordt bij iedere nieuwe tick vastgezet.
+- Kamerwisselingen en entering alert resetten explorationvoortgang niet.
+- Een daadwerkelijke tactical/explorationtick begint een nieuw interval.
+- Attack Support: single living ally, +3 Attack, 4 MP.
+- Duur: vijf ticks bij Wisdom 10, één stap per vijf Wisdom verschil,
+  afgerond naar nul, minimum één tick.
+- Duur en bonus worden bij toepassing gesnapshot.
+- Zelfde buff-ID vervangt bonus en herstart duur; niet stapelen.
+- Unit-state is gedeeld; Attack = basis + equipment + actieve buffs.
+- Buffs op bewaarde maps verlopen via dezelfde klok.
+- Gedeelde AbilityResolver voert de buff uit.
+- BattleSession/BattleScene ondersteunen ally-targetselection voor buffs.
+- Bestaande automatische healing en encounter-results blijven intact.
+- Geen permanente protagonist-startskill of MP-budget toegevoegd.
+- Geen buffs-AI, groepsbuffs, dispels, revival of ingredientkosten gebouwd.
+- Teststatus: geslaagd.
+
 # Gedeelde ability-uitvoering en protagonistcommandmenu
 
 - AbilityResolver is gedeeld door handmatige en automatische acties.

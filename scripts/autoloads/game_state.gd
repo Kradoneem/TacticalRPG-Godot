@@ -46,6 +46,7 @@ var defeated_enemy_squads: Dictionary = {}
 ## Quest ID -> dictionary of achieved objective IDs.
 ## Existing quest_states remains quest ID -> status string.
 var quest_objective_states: Dictionary = {}
+var gameplay_clock: GameplayClock = GameplayClock.new()
 
 func start_new_game() -> void:
 	party = UnitDataFactory.create_chapter_one_party()
@@ -73,7 +74,6 @@ func start_new_game() -> void:
 	quest_progress_reset.emit()
 	quest_log_changed.emit()
 
-	# Existing prototype stock, not final Chapter 1 balancing.
 	item_inventory[&"potion"] = 1
 	item_inventory[&"hi_potion"] = 1
 	item_inventory[&"ether"] = 1
@@ -85,13 +85,28 @@ func start_new_game() -> void:
 	equipment_inventory[&"sages_ring"] = 1
 
 	create_chapter_one_main_squad()
+
+	# Fresh session clock; old Units retain only their old session clock.
+	gameplay_clock = GameplayClock.new()
+	var main_squad: Squad = get_main_squad()
+	gameplay_clock.reset(main_squad)
+
 	item_inventory_changed.emit()
 	equipment_inventory_changed.emit()
 
-	var main_squad = get_main_squad()
-
 	if main_squad != null:
 		print("New game ready: %s" % main_squad.get_summary())
+
+func enable_attack_buff_test_loadout() -> void:
+	var squad: Squad = GameState.get_main_squad()
+
+	if squad == null:
+		return
+
+	var protagonist: Unit = squad.get_leader()
+	protagonist.learn_ability(&"attack_support")
+	protagonist.max_mp = 20
+	protagonist.mp = 20
 
 func create_chapter_one_main_squad() -> void:
 	if party.size() < 2:

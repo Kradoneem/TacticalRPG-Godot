@@ -164,31 +164,37 @@ func _show_action_feedback(action: BattleAction) -> void:
 		return
 
 	_action_feedback_serial += 1
-	var feedback_serial := _action_feedback_serial
+	var feedback_serial: int = _action_feedback_serial
 
-	var action_name := "Attack"
-	var amount_prefix := "-"
+	var action_name: String = (
+		action.skill.display_name if action.skill != null else "Attack"
+	)
 
-	if action.skill != null:
-		action_name = action.skill.display_name
-
-	if action.action_type == BattleAction.Type.HEALING:
-		amount_prefix = "+"
-		_action_feedback_label.modulate = Color("#8ff0a4")
-	elif action.action_type == BattleAction.Type.SKILL_DAMAGE:
+	if action.action_type == BattleAction.Type.BUFF:
 		_action_feedback_label.modulate = Color("#ffe183")
+		_action_feedback_label.text = "%s\n%s\nATK +%d" % [
+			action_name,
+			action.target.display_name,
+			action.applied_amount
+		]
+	elif action.action_type == BattleAction.Type.HEALING:
+		_action_feedback_label.modulate = Color("#8ff0a4")
+		_action_feedback_label.text = "%s\n+%d" % [
+			action_name, action.applied_amount
+		]
 	else:
-		_action_feedback_label.modulate = Color("#ff9f9f")
-
-	_action_feedback_label.text = "%s\n%s%d" % [
-		action_name,
-		amount_prefix,
-		action.applied_amount
-	]
+		_action_feedback_label.modulate = (
+			Color("#ffe183")
+			if action.action_type == BattleAction.Type.SKILL_DAMAGE
+			else Color("#ff9f9f")
+		)
+		_action_feedback_label.text = "%s\n-%d" % [
+			action_name, action.applied_amount
+		]
 
 	_action_feedback_label.show()
 	_hide_action_feedback_after_delay(feedback_serial)
-	
+
 func _hide_action_feedback_after_delay(
 	feedback_serial: int
 ) -> void:
@@ -245,23 +251,17 @@ func _build_formation_cards() -> void:
 	for slot_index in range(MAX_FORMATION_SLOTS):
 		var party_card := BattleUnitCard.new()
 		party_card.configure_visuals(
-			Color("#587aa0"),
-			Color("#b8d8ff")
+			Color("#587aa0"), Color("#b8d8ff")
 		)
-
+		party_card.target_requested.connect(_on_target_selected)
 		_party_formation.add_child(party_card)
 		_party_cards.append(party_card)
 
 		var enemy_card := BattleUnitCard.new()
 		enemy_card.configure_visuals(
-			Color("#994d4d"),
-			Color("#ffd0ca")
+			Color("#994d4d"), Color("#ffd0ca")
 		)
-
-		enemy_card.target_requested.connect(
-			_on_enemy_target_selected
-		)
-
+		enemy_card.target_requested.connect(_on_target_selected)
 		_enemy_formation.add_child(enemy_card)
 		_enemy_cards.append(enemy_card)
 
@@ -278,54 +278,23 @@ func _get_formation_unit(
 func _refresh_formation_cards() -> void:
 	_target_buttons.clear()
 
-	var player_squad := battle_session.get_player_squad()
-	var enemy_squad := battle_session.get_enemy_squad()
-
-	var target_selection_active := (
-		battle_session.is_target_selection_active()
-	)
-
-	var selected_command_text := (
-		battle_session.get_selected_command_text()
-	)
+	var targets: Array[Unit] = battle_session.get_selected_targets()
+	var command_text: String = battle_session.get_selected_command_text()
 
 	for slot_index in range(MAX_FORMATION_SLOTS):
-		var party_card := _party_cards[slot_index]
-		var party_unit := _get_formation_unit(
-			player_squad,
-			slot_index
+		var party_unit: Unit = _get_formation_unit(
+			battle_session.get_player_squad(), slot_index
+		)
+		var enemy_unit: Unit = _get_formation_unit(
+			battle_session.get_enemy_squad(), slot_index
 		)
 
-		party_card.set_unit(party_unit)
-		party_card.set_target_selection_enabled(false, "")
-
-		var enemy_card := _enemy_cards[slot_index]
-		var enemy_unit := _get_formation_unit(
-			enemy_squad,
-			slot_index
+		_refresh_target_card(
+			_party_cards[slot_index], party_unit, targets, command_text
 		)
-
-		var can_target_enemy := (
-			target_selection_active
-			and enemy_unit != null
-			and enemy_unit.is_alive()
+		_refresh_target_card(
+			_enemy_cards[slot_index], enemy_unit, targets, command_text
 		)
-
-		enemy_card.set_unit(enemy_unit)
-		enemy_card.set_target_selection_enabled(
-			can_target_enemy,
-			selected_command_text
-		)
-
-		if can_target_enemy:
-			enemy_card.set_meta(
-				"target_unit_id",
-				enemy_unit.unit_id
-			)
-
-			_target_buttons.append(enemy_card)
-		elif enemy_card.has_meta("target_unit_id"):
-			enemy_card.remove_meta("target_unit_id")
 
 func _refresh_presentation() -> void:
 	if (
@@ -449,10 +418,11 @@ func _on_command_selected(command_id: StringName) -> void:
 	if _action_feedback_label != null:
 		_action_feedback_label.hide()
 
-	battle_session.begin_enemy_target_selection(command_id)
+	battle_session.begin_target_selection(command_id)
 	_refresh_presentation()
 
 func _on_enemy_target_selected(target_unit_id: String) -> void:
+	_on_target_selected(target_unit_id)
 	if (
 		battle_session == null
 		or _action_sequence_running
@@ -675,3 +645,41 @@ func _finish_transition() -> void:
 	set_process_unhandled_input(false)
 
 	presentation_finished.emit(encounter_context)
+
+func _refresh_target_card(
+	card: BattleUnitCard,
+	unit: Unit,
+	targets: Array[Unit],
+	command_text: String
+) -> void:
+	card.set_unit(unit)
+
+	var enabled: bool = unit != null and unit in targets
+	card.set_target_selection_enabled(enabled, command_text)
+	card.tooltip_text = (
+		unit.get_attack_buff_summary() if unit != null else ""
+	)
+
+	if enabled:
+		card.set_meta("target_unit_id", unit.unit_id)
+		_target_buttons.append(card)
+	elif card.has_meta("target_unit_id"):
+		card.remove_meta("target_unit_id")
+
+
+func _on_target_selected(target_unit_id: String) -> void:
+	if (
+		battle_session == null
+		or _action_sequence_running
+		or _transition_processed
+	):
+		return
+
+	var action: BattleAction = battle_session.confirm_target(target_unit_id)
+	_refresh_presentation()
+
+	if action == null or not action.is_valid():
+		return
+
+	_show_action_feedback(action)
+	_continue_after_protagonist_action()
