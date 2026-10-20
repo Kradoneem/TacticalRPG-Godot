@@ -1,3 +1,25 @@
+# Encounter-results — nieuw ontwerpcontract
+
+Dit vervangt oudere dungeon-clear-only-resultregels.
+
+- Na volledige enemy squad defeat: eenmaal encounter-rewards en één
+  resultaatscherm na afloop van de korte battle transition.
+- Geen normaal resultaatscherm wanneer enemies na twee rondes nog leven.
+- Bijzondere encountermeldingen kunnen onafhankelijk results tonen,
+  zonder automatisch defeat-rewards te geven.
+- EncounterResult bevat daadwerkelijke opbrengsten en schermbeslissing.
+- GameState.settle_encounter() kent rewards eenmaal toe.
+- Python-XP-formule is gemigreerd; iedere levende deelnemer krijgt het
+  volledige squadbedrag. Defeated deelnemers krijgen geen XP.
+- Huidige sewercontent heeft geen geverifieerde gold/lootdata:
+  defaults blijven nul/leeg.
+- Squad defeat, map clear en expliciete locatie-mapclear zijn aparte
+  toekomstige questvoorwaarden, geen extra encounter-rewardtriggers.
+- Er is nog geen volledig questsysteem of location manifest geïmplementeerd.
+- Resultpanel blijft binnen de bestaande tijdelijke BattleScene-presentatie.
+- Automatische terugkeer/results gebeurt na de laatste actiefeedback.
+- Teststatus: “automatische en handmatige tests geslaagd”
+
 # Actuele aanvulling — equipment afgerond, 20 oktober 2026
 
 Dit blok heeft voorrang op conflicterende statusclaims hieronder.

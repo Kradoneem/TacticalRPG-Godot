@@ -23,6 +23,10 @@ var members: Array[Unit] = []
 var autonomy_mode: int
 var default_strategy: StringName = &"balanced"
 
+## Explicit enemy content. No gold/loot values are invented by resolution.
+var defeat_gold: int = 0
+var defeat_items: Dictionary = {}
+
 
 func _init(
 	new_squad_id: String,

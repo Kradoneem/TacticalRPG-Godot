@@ -36,6 +36,10 @@ var cleared_locations: Dictionary = {}
 ## Session persistence only: not disk save/load.
 var exploration_room_states: Dictionary = {}
 
+## Globally unique enemy squad ID -> defeat already processed.
+## Session state only; disk save/load is still separate.
+var defeated_enemy_squads: Dictionary = {}
+
 func start_new_game() -> void:
 	party = UnitDataFactory.create_chapter_one_party()
 
@@ -43,6 +47,7 @@ func start_new_game() -> void:
 	item_inventory.clear()
 	squads.clear()
 	exploration_room_states.clear()
+	defeated_enemy_squads.clear()
 
 	chapter = 1
 	day = 1.0
@@ -57,7 +62,7 @@ func start_new_game() -> void:
 	quest_states.clear()
 	cleared_locations.clear()
 
-	# Existing Python prototype stock; not final Chapter 1 balancing.
+	# Existing prototype stock, not final Chapter 1 balancing.
 	item_inventory[&"potion"] = 1
 	item_inventory[&"hi_potion"] = 1
 	item_inventory[&"ether"] = 1
@@ -347,3 +352,175 @@ func change_equipment(
 	unit_equipment_changed.emit(unit)
 
 	return {"success": true, "message": message}
+
+func settle_encounter(context: EncounterContext) -> EncounterResult:
+	## Called only after BattleSession is finished.
+	## No await: validation, claiming and application stay together.
+
+	if context == null:
+		return null
+
+	var result: EncounterResult = context.result
+
+	if result.settled:
+		return result
+
+	if context.player_squad == null or context.enemy_squad == null:
+		result.add_special_message("Encounter result has missing participants.")
+		result.settled = true
+		return result
+
+	result.enemy_squad_defeated = not context.enemy_squad.is_alive()
+
+	var claimable: bool = (
+		result.enemy_squad_defeated
+		and context.enemy_was_alive_at_start
+		and not context.enemy_squad.is_empty()
+		and not context.enemy_squad.squad_id.is_empty()
+		and not defeated_enemy_squads.has(context.enemy_squad.squad_id)
+	)
+
+	if not claimable:
+		result.settled = true
+		return result
+
+	var reward_error: String = _validate_encounter_rewards(context)
+
+	if not reward_error.is_empty():
+		result.add_special_message(
+			"Rewards were not applied: " + reward_error
+		)
+		result.settled = true
+		push_error(reward_error)
+		return result
+
+	# Claim before any notifications can call back into settlement.
+	defeated_enemy_squads[context.enemy_squad.squad_id] = true
+	result.defeat_rewards_claimed = true
+	result.settled = true
+
+	for unit: Unit in context.player_squad.members:
+		var alive_before: bool = unit.is_alive()
+		var level_before: int = unit.level
+		var xp_before: int = unit.experience
+		var stats_before: Dictionary = _capture_result_stats(unit)
+
+		var xp_gained: int = context.defeat_xp if alive_before else 0
+		var levels_gained: int = unit.gain_experience(xp_gained)
+
+		result.unit_results.append({
+			"unit_id": unit.unit_id,
+			"name": unit.display_name,
+			"alive": alive_before,
+			"xp_gained": xp_gained,
+			"xp_before": xp_before,
+			"xp_after": unit.experience,
+			"xp_needed": unit.get_experience_to_next_level(),
+			"level_before": level_before,
+			"level_after": unit.level,
+			"levels_gained": levels_gained,
+			"stats_before": stats_before,
+			"stats_after": _capture_result_stats(unit)
+		})
+
+	# Commit inventory data before emitting signals.
+	var previous_gold: int = gold
+	gold += context.defeat_gold
+	result.gold_gained = gold - previous_gold
+
+	for raw_id in context.defeat_items:
+		var item_id := StringName(raw_id)
+		var amount: int = int(context.defeat_items[raw_id])
+
+		item_inventory[item_id] = get_item_quantity(item_id) + amount
+		result.items_gained[item_id] = amount
+
+	if result.gold_gained != 0:
+		gold_changed.emit(gold)
+
+	if not result.items_gained.is_empty():
+		item_inventory_changed.emit()
+
+	return result
+
+
+func _validate_encounter_rewards(context: EncounterContext) -> String:
+	if context.defeat_xp < 0 or context.defeat_gold < 0:
+		return "XP and gold rewards cannot be negative."
+
+	var seen_ids: Dictionary = {}
+
+	for raw_id in context.defeat_items:
+		if not raw_id is String and not raw_id is StringName:
+			return "Reward item IDs must be strings."
+
+		var item_id := StringName(raw_id)
+
+		if seen_ids.has(item_id):
+			return "Duplicate reward item ID."
+
+		seen_ids[item_id] = true
+
+		if ItemData.get_item(item_id) == null:
+			return "Unknown reward item: %s." % item_id
+
+		var amount: Variant = context.defeat_items[raw_id]
+
+		if not amount is int or int(amount) <= 0:
+			return "Item reward quantities must be positive integers."
+
+	return ""
+
+
+func _capture_result_stats(unit: Unit) -> Dictionary:
+	return {
+		"max_hp": unit.max_hp,
+		"attack": unit.attack,
+		"defense": unit.defense,
+		"speed": unit.speed,
+		"wisdom": unit.wisdom
+	}
+
+
+func is_enemy_squad_defeated(squad_id: String) -> bool:
+	return bool(defeated_enemy_squads.get(squad_id, false))
+
+
+func is_map_cleared(room_id: String) -> bool:
+	## Queries actual saved gameplay state.
+	## Unknown and enemy-free maps do not imply combat completion.
+
+	if not exploration_room_states.has(room_id):
+		return false
+
+	var room: Dictionary = exploration_room_states[room_id]
+	var enemies: Dictionary = room.get("enemies", {})
+
+	if enemies.is_empty():
+		return false
+
+	for enemy_state: Dictionary in enemies.values():
+		var enemy_squad: Squad = enemy_state.get("squad")
+
+		if (
+			enemy_squad == null
+			or enemy_squad.is_empty()
+			or enemy_squad.is_alive()
+		):
+			return false
+
+	return true
+
+
+func are_location_maps_cleared(required_map_ids: Array[String]) -> bool:
+	## A future location/quest definition supplies the full explicit list.
+	## Never infer location completion from only the visited maps.
+
+	if required_map_ids.is_empty():
+		return false
+
+	for room_id: String in required_map_ids:
+		if not is_map_cleared(room_id):
+			return false
+
+	return true

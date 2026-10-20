@@ -26,6 +26,10 @@ var _party_cards: Array[BattleUnitCard] = []
 var _enemy_cards: Array[BattleUnitCard] = []
 var _action_feedback_label: Label
 var _action_feedback_serial: int = 0
+var _results_panel: EncounterResultsPanel
+var _action_sequence_running: bool = false
+var _transition_processed: bool = false
+var _finish_emitted: bool = false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -522,10 +526,36 @@ func _focus_return_button() -> void:
 	_return_button.grab_focus()
 
 func _on_return_button_pressed() -> void:
-	if battle_session == null or not battle_session.is_finished():
+	if (
+		battle_session == null
+		or not battle_session.is_finished()
+		or _action_sequence_running
+		or _transition_processed
+	):
 		return
 
-	presentation_finished.emit(encounter_context)
+	_transition_processed = true
+	_return_button.disabled = true
+
+	var result: EncounterResult = GameState.settle_encounter(
+		encounter_context
+	)
+
+	if result == null or not result.should_show():
+		_finish_transition()
+		return
+
+	# Remove old action feedback without deleting gameplay presentation.
+	_action_feedback_serial += 1
+
+	for child: Node in get_children():
+		if child is CanvasItem:
+			(child as CanvasItem).hide()
+
+	_results_panel = EncounterResultsPanel.new()
+	_results_panel.continued.connect(_finish_transition)
+	add_child(_results_panel)
+	_results_panel.configure(result)
 
 func _on_attack_button_pressed() -> void:
 	if battle_session == null:
@@ -574,11 +604,25 @@ func _on_enemy_target_selected(target_unit_id: String) -> void:
 	_continue_after_protagonist_action()
 
 func _continue_after_protagonist_action() -> void:
+	if _action_sequence_running or _transition_processed:
+		return
+
+	_action_sequence_running = true
+
 	await get_tree().create_timer(
 		PROTAGONIST_ACTION_DISPLAY_SECONDS
 	).timeout
 
-	_play_automatic_action_sequence()
+	await _play_automatic_action_sequence()
+
+	_action_sequence_running = false
+
+	if (
+		battle_session != null
+		and battle_session.is_finished()
+		and not _transition_processed
+	):
+		_on_return_button_pressed()
 
 func _play_automatic_action_sequence() -> void:
 	while battle_session != null:
@@ -669,6 +713,19 @@ func _configure_target_navigation() -> void:
 		)
 
 func _input(event: InputEvent) -> void:
+	if _finish_emitted:
+		return
+
+	if is_instance_valid(_results_panel):
+		if _results_panel.handle_input(event):
+			get_viewport().set_input_as_handled()
+		return
+
+	if _transition_processed:
+		if event is InputEventKey:
+			get_viewport().set_input_as_handled()
+		return
+
 	if (
 		not event is InputEventKey
 		or not event.is_pressed()
@@ -712,3 +769,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	elif event.is_action_pressed("engage"):
 		get_viewport().set_input_as_handled()
+
+func _finish_transition() -> void:
+	if _finish_emitted:
+		return
+
+	_finish_emitted = true
+	_action_feedback_serial += 1
+
+	# Stop input immediately. SceneManager performs the existing teardown.
+	set_process_input(false)
+	set_process_unhandled_input(false)
+
+	presentation_finished.emit(encounter_context)
