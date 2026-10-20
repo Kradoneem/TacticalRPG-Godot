@@ -1,3 +1,42 @@
+# Actuele aanvulling — equipment afgerond, 20 oktober 2026
+
+Dit blok heeft voorrang op conflicterende statusclaims hieronder.
+De eerdere Items-, Party-, junction- en battle-lifecycle-milestones
+blijven afgerond.
+
+## Getest en gepusht gameplay-ijkpunt
+
+- Commit: `9c0546b — feat: migrate party equipment and derived unit stats`.
+- Volledige SHA: `9c0546b5c0f4d1fb292c98aea99186184c815d50`.
+- De gebruiker bevestigt dat de implementatie en tests werken.
+- Equipment is geen Party-placeholder meer. Formation blijft placeholder.
+
+## Architectuur en gedrag
+
+- EquipmentData bevat de centrale equipmentdefinities.
+- GameState.equipment_inventory bewaart equipment-ID → beschikbaar aantal.
+- Unit bewaart slot → uitgeruste ID; publieke equipment levert een snapshot.
+- Effectieve stats zijn basisstats plus huidige equipmentbonussen.
+- Bestaande combat- en UI-callers blijven dezelfde Unit-properties lezen.
+- GameState.change_equipment() beheert voorraad en uitrustingswissels.
+- Uitgeruste gear is niet tegelijkertijd beschikbaar in voorraad.
+- Vervangen of afgelegde gear keert terug naar voorraad.
+- Party ondersteunt squad → lid → slot → uitrusten/afleggen.
+- Level-ups wijzigen basisstats; equipmentbonussen blijven afzonderlijk.
+- HP-percentage blijft bij equipmentwissels behouden, afgerond naar beneden.
+- Levende units behouden minimaal één HP; defeated units blijven op nul HP.
+- Items blijft functioneren met de effectieve stat-properties.
+
+## Grenzen
+
+- Slots: weapon, armor, accessory; Wooden Shield blijft voorlopig armor.
+- Gear en startvoorraad zijn Python-prototypes, geen definitieve balans.
+- Geen equipment-granted abilities, start-/finishing-loadouts,
+  classrestricties, durability of unieke enchantments geïmplementeerd.
+- Volgende gameplay-milestone nog niet gekozen.
+
+---
+
 
 # Actuele aanvulling — 20 oktober 2026
 
