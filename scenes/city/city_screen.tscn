@@ -1,8 +1,9 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://cilaktchleuww"]
 
-[ext_resource type="Script" path="res://scripts/city/city_screen.gd" id="1_city"]
+[ext_resource type="Script" uid="uid://u2odkaivb4jf" path="res://scripts/city/city_screen.gd" id="1_city"]
+[ext_resource type="Texture2D" uid="uid://0kvnr6ftxta0" path="res://assets/backgrounds/castletown.png" id="2_55f1n"]
 
-[node name="CityScreen" type="Control"]
+[node name="CityScreen" type="Control" unique_id=1615047379]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -10,3 +11,4 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_city")
+city_background = ExtResource("2_55f1n")

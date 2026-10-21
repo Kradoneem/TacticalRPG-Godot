@@ -1,3 +1,6 @@
+
+
+
 # Minimale dialogue-loop bij sewer-entrance
 
 - DialogueLine, DialogueChoice en DialogueDefinition zijn Resources.
@@ -23,7 +26,13 @@ Werkafspraken staan in de projectpersona, niet hier.
 Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **[?]** niet gevalideerd of nog te bouwen.
 
 ## Status
-
+- Laatste gameplay-milestone: city selection en guild sewerquestacceptatie.
+  Commit-message: `feat: add city selection and guild sewer quest acceptance`.
+  Commit-SHA nog invullen na verificatie van de push.
+- Automatische tests: quest-objectives en guild-quest door gebruiker geslaagd verklaard.
+- Handmatige city/guild- en city↔sewer-acceptatietests: nog niet afzonderlijk bevestigd.
+- Volgende richting: shops, world travel en tavern; concrete volgende milestone nog niet gekozen.
+- Combatuitbreidingen en art-polish blijven geparkeerd.
 - Repo: https://github.com/Kradoneem/TacticalRPG-Godot · branch `main` · lokaal `~/tactical-rpg`.
 - Python-bron: https://github.com/Kradoneem/TacticalRPG
   (`skill.py`, `skill_data.py`, `unit.py`, `game_state.py`, `party_menu.py`, `battle.py`, `battle_scene.py`, `battle_results_scene.py`).
@@ -35,6 +44,7 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 | Milestone | Kern |
 |---|---|
+| City selection + guild sewerquest | [Code aanwezig; automatische en handmatige tests geslaagd] CityScreen heeft selecteerbare bestemmingen zonder tactical grid. Guilddialogue ondersteunt accepteren/later; annuleren kent niets toe. Guild activeert expliciet de prototypequest voor corridor+junction via GameState. Geen rewards of sewer-toegangsgate. SceneManager heeft city↔sewer-overgangen met behoud van explorationcache. City-background is optioneel; zonder texture wordt een kleur-placeholder getoond. |
 | Handmatige single-ally healing (`c3f5d26`) | Healing, damage en Attack Support delen één targetselectie. `AbilityResolver` valideert opnieuw en voert kosten/effect eenmaal uit. Annuleren of ongeldig target kost niets. Zelf-healing mag bij gewonde caster. `BattleScene` geeft `GameState.gameplay_clock` aan `BattleSession`. Compat-entrypoints `begin_enemy_target_selection`, `confirm_enemy_target` en `_on_enemy_target_selected` blijven bestaan. |
 | Gameplayklok + Attack Support-buff | Eén `GameplayClock` in `GameState`, geen realtime Timer. Eén tick per volledig afgehandelde tactical ronde; afgebroken rondes en side-view geven geen tick. Exploration telt alleen geldige Main Squad-stappen. Attack Support: single living ally, +3 Attack, 4 MP, duur 5 ticks bij Wisdom 10, ±1 per 5 Wisdom verschil (naar nul afgerond, minimum 1). Duur en bonus worden gesnapshot; hetzelfde buff-ID vervangt en herstart. Attack = basis + equipment + buffs. |
 | Gedeelde ability-uitvoering + protagonistcommandmenu | `AbilityResolver` voor handmatig en automatisch. `AutomaticActionResolver` kiest alleen het bestaande supportgedrag. `BattleAbilityMenu`: Attack, Skills, Spells uit bekende IDs. Python additive damage-scaling en defense gemigreerd. Focused Strike behoudt prototype-multiplier. |
@@ -49,6 +59,29 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 | Abilitymodel (`a6a9656`, `39dca3c`) | `Skill.Category`, effecttypes, targettypes, scaling; `Unit.learn_ability`/`forget_ability`/`knows_ability`; compat-methods `learn_skill`/`learn_spell`. |
 
 ## Ontwerpbesluiten [O]
+
+**World map, city en gebouwen — actuele gebruikerskeuze**
+- World map: locatienodes; huidige locatie zichtbaar; een andere locatie selecteren en reizen kost tijd.
+- City: selectiescreen met prerendered stadsbeeld en labels op relevante gebouwen. Geen tactical grid of squadmovement.
+- Dungeon: bestaande grid-gebaseerde exploration/alert-loop blijft behouden.
+- Shop: eigen shopping screen met Talk / Buy / Sell; eigenaardialogue moet questinteracties kunnen ondersteunen.
+- Tavern: eigen prerendered interieur met selecteerbare personen die dialogue starten.
+- Adventurer's Guild: vroege bestemming waar de speler de sewerquest krijgt.
+- Home: later dialogue en achievements; nu niet bouwen.
+- Castle en overige guilds: interacties nog niet uitgewerkt.
+- World-locatie, stadsgebouw en dungeonkamer zijn verschillende contexten; geen fictieve city-gridcel gebruiken.
+- Questacceptatie en sewer-toegang zijn afzonderlijke regels; er is geen questgate toegevoegd.
+- Reistijdwaarden, tijdskosten binnen de stad en de relatie tussen dagtijd en GameplayClock zijn nog niet vastgesteld.
+- Shopspecificieke prijzen en voorwaarden horen niet in ItemData of SkillData.
+
+**Dialogue**
+- Bestaande entrance-dialogue blijft one-shot.
+- DialogueDefinition.allow_replay ondersteunt herhaalbare gesprekken.
+- Bij herhaalbare gesprekken bewaren flags de laatst afgeronde keuze.
+- DialogueController.finished geeft dialogue-ID, choice-ID en commitstatus terug.
+- Main routeert het resultaat naar de oorspronkelijke actieve aanvrager en wist de aanvraag ook bij annuleren.
+- De guildinteractie kent de quest expliciet toe; dialogue-tekstdata voert geen gameplaycalls uit.
+- Accepteren telt pas na bevestiging van de reactiepagina; annuleren ervoor activeert geen quest.
 
 **Tactical state**
 - Vrije exploration: WASD, geen move budget, Escape opent Party.
@@ -83,13 +116,23 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 - Formation in Party is placeholder.
 - Niet gebouwd: equipment-granted abilities, start-/finishing-loadouts, classrestricties, durability, battle-itemgebruik, automatische itemstrategieën, revival, groepsheals/-buffs, buff-AI, dispels, drain, ingredientkosten, elemental resistances.
-- Niet gebouwd: dialogue, shops, NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate).
-- Niet end-to-end gevalideerd: dialogueblokkering van Party; meerdere verbindingen tussen dezelfde maps; bewaarde maps accepteren hun opgeslagen vertrekcel.
+- Niet gebouwd: shops, NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate).
+- Niet end-to-end gevalideerd: meerdere verbindingen tussen dezelfde maps; bewaarde maps accepteren hun opgeslagen vertrekcel.
 - Ontbreekt: begrensd cache-ontlaadbeleid.
 - Legacy `tacticaltest.gd` heeft nog eigen PartyMenu-aansturing. Ruim gericht op; maak geen tweede controller, geen `ExplorationPartyMenu`, geen extra Party-Autoload.
 - Encounter-party-heal en perception/lockpicks zijn contentwensen, nog geen regels. Ontdekken, openen en loot toekennen blijven afzonderlijke stappen.
 - Dynamisch fakkellicht is backlog (zo nodig `CanvasModulate` + `PointLight2D`).
 - Open vraag: definitieve Chapter-1-resourcebudgetten en content (huidige items, gear en quests zijn prototypes).
+- City/guild-code aanwezig; automatische quest-objective- en guildtests geslaagd.
+- Handmatige city/guild-inputisolatie en city↔sewer-statebehoud nog afzonderlijk te bevestigen.
+- Quest-objectivetest activeert drie expliciete fixtures, niet de volledige catalogus.
+- Guildtest initialiseert CityScreen vóór callbacks die UI vernieuwen.
+- - City-background lokaal beschikbaar: `assets/backgrounds/castletown.png`.
+- Koppeling gebeurt via CityScreen.city_background in `scenes/city/city_screen.tscn`.
+- Asset nog niet op Git bevestigd; visuele aansluiting van de prototype-labelposities nog te valideren.
+- Guildquest gebruikt alleen de bestaande sewer test-slice corridor+junction, niet het volledige toekomstige dungeon.
+- Guild-inlevering, questrewards en verdere NPC-dialogue ontbreken.
+- Shops met Talk/Buy/Sell, world travel met tijdskosten en tavern-personenselectie zijn nog niet gebouwd.
 
 ## Lokale repositoryhygiëne
 
