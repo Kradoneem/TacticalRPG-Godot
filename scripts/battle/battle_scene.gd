@@ -42,7 +42,11 @@ func _ready() -> void:
 
 func configure(context: EncounterContext) -> void:
 	encounter_context = context
-	battle_session = BattleSession.new(encounter_context)
+
+	battle_session = BattleSession.new(
+		encounter_context,
+		GameState.gameplay_clock
+	)
 	battle_session.begin_battle()
 
 	if not is_node_ready():
@@ -422,25 +426,8 @@ func _on_command_selected(command_id: StringName) -> void:
 	_refresh_presentation()
 
 func _on_enemy_target_selected(target_unit_id: String) -> void:
+	# Compatibility entrypoint only.
 	_on_target_selected(target_unit_id)
-	if (
-		battle_session == null
-		or _action_sequence_running
-		or _transition_processed
-	):
-		return
-
-	var resolved_action: BattleAction = battle_session.confirm_enemy_target(
-		target_unit_id
-	)
-
-	_refresh_presentation()
-
-	if resolved_action == null or not resolved_action.is_valid():
-		return
-
-	_show_action_feedback(resolved_action)
-	_continue_after_protagonist_action()
 
 func _continue_after_protagonist_action() -> void:
 	if _action_sequence_running or _transition_processed:
@@ -506,17 +493,23 @@ func _confirm_focused_target() -> void:
 	if _target_buttons.is_empty():
 		return
 
-	var target_button := _target_buttons[_selected_target_index]
+	if (
+		_selected_target_index < 0
+		or _selected_target_index >= _target_buttons.size()
+	):
+		return
+
+	var target_button: Button = _target_buttons[_selected_target_index]
 
 	if not target_button.has_meta("target_unit_id"):
 		push_warning("Target button has no target_unit_id metadata.")
 		return
 
-	var target_unit_id := String(
+	var target_unit_id: String = String(
 		target_button.get_meta("target_unit_id")
 	)
 
-	_on_enemy_target_selected(target_unit_id)
+	_on_target_selected(target_unit_id)
 
 func _configure_target_navigation() -> void:
 	if _target_buttons.is_empty():

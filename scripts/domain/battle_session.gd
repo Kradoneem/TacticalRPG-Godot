@@ -37,6 +37,7 @@ var _latest_log: Array[String] = []
 var _selected_command_id: StringName = &""
 var _main_squad_member_index: int = 0
 var _enemy_squad_member_index: int = 0
+var _gameplay_clock: GameplayClock
 
 
 func _init(
@@ -223,23 +224,8 @@ func get_latest_log_text(maximum_lines: int = -1) -> String:
 	return "\n".join(lines_to_show)
 
 func begin_enemy_target_selection(command_id: StringName) -> void:
+	# Compatibility entrypoint. All selection uses the shared route.
 	begin_target_selection(command_id)
-	_clear_log()
-
-	var reason: String = get_protagonist_command_reason(command_id)
-
-	if not reason.is_empty():
-		_add_log(reason)
-		return
-
-	if get_targetable_enemy_units().is_empty():
-		_finish_if_required()
-		return
-
-	_selected_command_id = command_id
-	action_step = ActionStep.TARGET_SELECTION
-
-	_add_log("Choose a target for %s." % get_selected_command_text())
 
 func cancel_target_selection() -> void:
 	if not is_target_selection_active():
@@ -382,7 +368,6 @@ func _find_living_enemy_by_id(target_unit_id: String) -> Unit:
 
 	return null
 
-
 func _resolve_protagonist_command(
 	protagonist: Unit,
 	target: Unit,
@@ -403,7 +388,8 @@ func _resolve_protagonist_command(
 			return null
 
 		var damage: int = CombatResolverData.calculate_physical_damage(
-			protagonist, target
+			protagonist,
+			target
 		)
 		target.take_damage(damage)
 
@@ -418,12 +404,13 @@ func _resolve_protagonist_command(
 				damage
 			]
 		)
+
 		_add_log(attack_action.message)
 		return attack_action
 
 	var ability: Skill = SkillData.get_skill(command_id)
 
-	if ability == null or ability.effect_type == Skill.EffectType.HEAL:
+	if ability == null:
 		return null
 
 	if (
@@ -433,6 +420,8 @@ func _resolve_protagonist_command(
 		_add_log("Buff command requires a gameplay clock.")
 		return null
 
+	# The shared resolver rechecks ownership, target validity and costs.
+	# Healing, damage and buffs all use this execution path.
 	var action: BattleAction = AbilityResolver.resolve(
 		protagonist,
 		target,
@@ -445,60 +434,6 @@ func _resolve_protagonist_command(
 	if action != null:
 		_add_log(action.message)
 
-	return action
-
-var _gameplay_clock: GameplayClock
-
-func _resolve_damage_skill(
-	attacker: Unit,
-	defender: Unit,
-	skill_id: StringName,
-	action_name: String
-) -> BattleAction:
-	if not attacker.knows_skill(skill_id):
-		_add_log(
-			"%s does not know %s."
-			% [attacker.display_name, action_name]
-		)
-		return null
-
-	var skill := SkillData.get_skill(skill_id)
-
-	if skill == null:
-		_add_log("Skill data could not be found: %s." % skill_id)
-		return null
-
-	if not attacker.spend_mp(skill.mp_cost):
-		_add_log(
-			"%s lacks MP for %s."
-			% [attacker.display_name, skill.display_name]
-		)
-		return null
-
-	var damage := CombatResolverData.calculate_skill_damage(
-		attacker,
-		defender,
-		skill
-	)
-
-	defender.take_damage(damage)
-
-	var action := BattleAction.new()
-	action.configure_damage(
-		attacker,
-		defender,
-		damage,
-		"%s uses %s on %s for %d damage."
-		% [
-			attacker.display_name,
-			skill.display_name,
-			defender.display_name,
-			damage
-		],
-		skill
-	)
-
-	_add_log(action.message)
 	return action
 
 
@@ -640,15 +575,18 @@ func get_protagonist_command_reason(command_id: StringName) -> String:
 
 	var ability: Skill = SkillData.get_skill(command_id)
 	var reason: String = AbilityResolver.get_unavailable_reason(
-		protagonist, ability
+		protagonist,
+		ability
 	)
 
 	if not reason.is_empty():
 		return reason
 
-	# This milestone exposes damage and Attack buffs, not manual healing yet.
-	if ability.effect_type == Skill.EffectType.HEAL:
-		return "Manual healing is not available in this command menu yet."
+	if (
+		ability.effect_type == Skill.EffectType.BUFF
+		and _gameplay_clock == null
+	):
+		return "Buff command requires a gameplay clock."
 
 	if _get_targets_for_command(command_id).is_empty():
 		return "No valid targets for this command."

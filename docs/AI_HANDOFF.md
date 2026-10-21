@@ -1,3 +1,19 @@
+# Handmatige single-ally healing en commandconsolidatie
+
+- Protagonistcommands ondersteunen bekende single-ally healing-spells.
+- Alleen gewonde, levende leden van de eigen squad zijn healtargets.
+- Zelf-healing is toegestaan wanneer de caster gewond is.
+- Damage, healing en Attack Support gebruiken dezelfde targetselectie.
+- AbilityResolver valideert opnieuw en voert kosten/effect eenmaal uit.
+- Annuleren en ongeldige targets kosten niets.
+- Bestaande healingformules en automatische supportkeuzes zijn behouden.
+- BattleScene geeft de sessieklok expliciet aan BattleSession.
+- Compatibilityfallback voor oudere BattleSession-callers blijft behouden.
+- Oude dubbele wrapperbodies en ongebruikte _resolve_damage_skill verwijderd.
+- Side-view acties en rondes geven geen gameplayticks.
+- Geen permanente protagonist-startspell of MP-budget toegevoegd.
+- Teststatus: automatische en handmatige tests geslaagd.
+
 # Gameplayklok en Attack Support-buff
 
 - GameState bezit één GameplayClock per gamesessie; geen realtime Timer.
