@@ -1,3 +1,16 @@
+**Shops [O]**
+- Eigen ShopDefinition per shop; ShopData koppelt stad + bestemming-ID.
+- Consumables en equipment; onbeperkte voorraad; één exemplaar per bevestiging.
+- Koopprijzen zijn shopcontent, niet ItemData/EquipmentData.
+- Verkoopprijs is helft van plaatselijke koopprijs, naar beneden afgerond.
+- Alleen losse inventory en opgenomen shopproducten; uitgerust equipment eerst afleggen.
+- Flags beperken Buy; Sell van opgenomen producten blijft mogelijk ongeacht kooplock.
+- Gold/inventory worden vóór signals samen gecommit; aankoop valideert flags opnieuw.
+- Talk gebruikt bestaande herhaalbare dialogue; geen questtoekenning/inlevering gebouwd.
+- Aldenmoor-prijzen zijn nieuw prototypecontent, geen Python-migratie of definitieve balans.
+- Geen tijdskosten; geen nieuwe startvoorraad/gold; geen restockstate.
+- Cross-city handelswinst is mogelijk bij toekomstige prijsverschillen; nog geen economische regels toegevoegd.
+
 # City layouts
 - City scene en layouts getest, koppeling met sewer werkt
 - Art beschikbaar

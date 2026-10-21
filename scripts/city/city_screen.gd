@@ -21,7 +21,7 @@ var _selected_index: int = 0
 var _viewing_guild: bool = false
 var _transitioning: bool = false
 var _page_frame: int = -1
-
+var _shop_screen: ShopScreen
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -31,8 +31,16 @@ func _ready() -> void:
 	GameState.in_city = true
 
 	_build_screen()
-	_show_city()
 
+	_shop_screen = ShopScreen.new()
+	_shop_screen.name = "ShopScreen"
+	add_child(_shop_screen)
+
+	_shop_screen.closed.connect(_show_city)
+	_shop_screen.talk_requested.connect(_on_shop_talk_requested)
+
+	_show_city()
+	
 func _build_screen() -> void:
 	_layout_texture = city_background
 
@@ -113,6 +121,7 @@ func _build_screen() -> void:
 	_update_city_layout()
 	call_deferred("_update_city_layout")
 	
+
 func _show_city() -> void:
 	_viewing_guild = false
 	_selected_index = 0
@@ -122,9 +131,10 @@ func _show_city() -> void:
 	_locations_layer.show()
 
 	_title.text = "%s — City" % GameState.current_city
+
 	_status.text = (
 		"WASD/pijltjes: selecteren | Enter/Spatie: openen | Escape: Party\n"
-		+ "Shop, Tavern, Castle en Home zijn nog niet geïmplementeerd."
+		+ "Tavern, Castle en Home zijn nog niet geïmplementeerd."
 	)
 
 	if _layout_texture == null:
@@ -249,10 +259,13 @@ func _confirm_selection() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _shop_screen != null and _shop_screen.is_open():
+		_shop_screen.handle_menu_input(event)
+		return
+
 	if not event is InputEventKey:
 		return
 
-	# Escape remains available to the central PartyMenuController.
 	if event.is_action("ui_cancel"):
 		return
 
@@ -280,9 +293,11 @@ func _input(event: InputEvent) -> void:
 	elif event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
 		_confirm_selection()
 
-
 func _on_destination_selected(destination_id: StringName) -> void:
-	if _transitioning:
+	if (
+		_transitioning
+		or (_shop_screen != null and _shop_screen.is_open())
+	):
 		return
 
 	var destination: CityDestination = CityData.get_destination(
@@ -296,6 +311,20 @@ func _on_destination_selected(destination_id: StringName) -> void:
 		CityDestination.Kind.GUILD:
 			_show_guild()
 
+		CityDestination.Kind.SHOP:
+			var shop: ShopDefinition = ShopData.get_shop_for_destination(
+				GameState.current_city,
+				destination_id
+			)
+
+			if _shop_screen.open_shop(shop):
+				_locations_layer.hide()
+				_guild_panel.hide()
+			else:
+				_status.text = (
+					"Shop ontbreekt of heeft ongeldige content."
+				)
+
 		CityDestination.Kind.SEWERS:
 			_enter_sewers()
 
@@ -304,7 +333,6 @@ func _on_destination_selected(destination_id: StringName) -> void:
 				"%s is nog niet geïmplementeerd."
 				% destination.display_name
 			)
-
 
 func _on_talk_to_guild_clerk() -> void:
 	if (
@@ -335,6 +363,14 @@ func on_dialogue_finished(
 	choice_id: StringName,
 	committed: bool
 ) -> void:
+	if _shop_screen != null and _shop_screen.is_open():
+		_shop_screen.on_dialogue_finished(
+			dialogue_id,
+			choice_id,
+			committed
+		)
+		return
+
 	if dialogue_id != DialogueData.GUILD_SEWER_DIALOGUE_ID:
 		return
 
@@ -343,7 +379,6 @@ func on_dialogue_finished(
 
 	_page_frame = Engine.get_process_frames()
 	_build_guild_panel()
-
 
 func _enter_sewers() -> void:
 	if not can_enter_sewers():
@@ -371,12 +406,22 @@ func _perform_sewer_entry() -> void:
 
 
 func can_enter_sewers() -> bool:
-	return not _transitioning and not _viewing_guild and can_process()
+	return (
+		not _transitioning
+		and not _viewing_guild
+		and can_process()
+		and not (_shop_screen != null and _shop_screen.is_open())
+	)
 
 
 func can_open_party_menu() -> bool:
-	return not _transitioning
-
+	return (
+		not _transitioning
+		and not (
+			_shop_screen != null
+			and _shop_screen.is_confirming()
+		)
+	)
 
 func can_show_quest_updates() -> bool:
 	return not _transitioning
@@ -424,3 +469,17 @@ func _update_city_layout() -> void:
 			position_ratio * image_rect.size
 			- button_size * 0.5
 		)
+
+func _on_shop_talk_requested(definition: DialogueDefinition) -> void:
+	var main: Node = get_tree().current_scene
+
+	if main == null or not main.has_method("request_dialogue"):
+		push_warning("Shop Talk requires Main.")
+		return
+
+	if not bool(main.call(
+		"request_dialogue",
+		self,
+		definition
+	)):
+		push_warning("Shop Talk kon niet starten.")

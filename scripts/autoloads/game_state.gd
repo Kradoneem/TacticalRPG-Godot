@@ -721,3 +721,30 @@ func commit_dialogue_result(
 		)
 
 	return true
+
+func buy_shop_product(
+	shop_id: StringName,
+	kind: int,
+	product_id: StringName
+) -> Dictionary:
+	return ShopTransaction.resolve(
+		self,
+		ShopData.get_shop(shop_id),
+		kind,
+		product_id,
+		false
+	)
+
+
+func sell_shop_product(
+	shop_id: StringName,
+	kind: int,
+	product_id: StringName
+) -> Dictionary:
+	return ShopTransaction.resolve(
+		self,
+		ShopData.get_shop(shop_id),
+		kind,
+		product_id,
+		true
+	)
