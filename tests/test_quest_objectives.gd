@@ -17,17 +17,33 @@ func _make_squad(id: String) -> Squad:
 	squad.add_member(Unit.new(id + "_unit", "Test enemy", 1, 10, 2, 1, 3, 0))
 	return squad
 
-
 func _run_tests() -> void:
 	var state: Node = root.get_node("GameState")
 	state.start_new_game()
 	state.quest_objective_updated.connect(_on_update)
 
-	for quest_id: String in QuestData.get_all_quest_ids():
+	# This test owns three explicit fixtures, not the entire quest catalog.
+	var fixture_ids: Array[String] = [
+		"test_junction_patrol",
+		"test_junction_clear",
+		"test_sewer_slice_clear"
+	]
+
+	for quest_id: String in fixture_ids:
 		state.activate_quest(quest_id)
 
-	_check(state.get_quest_log_ids().size() == 3, "Three prototype quests active")
-	_check(_updates == 0, "Activation without achieved targets gives no update")
+	_check(
+		state.get_quest_log_ids().size() == 3,
+		"Three prototype quests active"
+	)
+	_check(
+		state.get_quest_status(QuestData.GUILD_SEWER_QUEST_ID) == "inactive",
+		"Guild quest is not activated by objective test fixtures"
+	)
+	_check(
+		_updates == 0,
+		"Activation without achieved targets gives no update"
+	)
 
 	var patrol: Squad = _make_squad("junction_patrol_rats")
 	var stationary: Squad = _make_squad("junction_static_rats")
@@ -74,7 +90,10 @@ func _run_tests() -> void:
 		not state.are_quest_objectives_achieved("test_sewer_slice_clear"),
 		"Uncleared corridor keeps location objective open"
 	)
-	_check(_updates == 2, "Second objective produces one additional update")
+	_check(
+		_updates == 2,
+		"Second objective produces one additional update"
+	)
 
 	state.complete_quest("test_sewer_slice_clear")
 	_check(
@@ -97,21 +116,29 @@ func _run_tests() -> void:
 
 	var gold_before: int = int(state.gold)
 	state.complete_quest("test_sewer_slice_clear")
+
 	_check(
 		state.get_quest_status("test_sewer_slice_clear") == "completed",
 		"Explicit completion succeeds"
 	)
-	_check(int(state.gold) == gold_before, "Quest completion invents no rewards")
+	_check(
+		int(state.gold) == gold_before,
+		"Quest completion invents no rewards"
+	)
 
 	state.activate_quest("test_junction_patrol")
 	state.refresh_quest_objectives()
-	_check(_updates == 3, "Repeated activation does not reset progress")
+	_check(
+		_updates == 3,
+		"Repeated activation does not reset progress"
+	)
 
 	state.start_new_game()
 	_check(state.get_quest_log_ids().is_empty(), "New game resets quest log")
 	_check(
 		not state.is_quest_objective_achieved(
-			"test_junction_patrol", &"clear_target"
+			"test_junction_patrol",
+			&"clear_target"
 		),
 		"New game resets objective progress"
 	)
@@ -119,6 +146,7 @@ func _run_tests() -> void:
 	# Accepting a quest after its target has already been defeated.
 	state.defeated_enemy_squads["junction_patrol_rats"] = true
 	state.activate_quest("test_junction_patrol")
+
 	_check(
 		state.are_quest_objectives_achieved("test_junction_patrol"),
 		"Previously satisfied target counts on acceptance"
@@ -126,7 +154,6 @@ func _run_tests() -> void:
 
 	print("Quest tests: %d failure(s)." % _failures)
 	quit(0 if _failures == 0 else 1)
-
 
 func _check(condition: bool, description: String) -> void:
 	if condition:

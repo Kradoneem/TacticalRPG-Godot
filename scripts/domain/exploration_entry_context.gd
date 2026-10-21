@@ -1,12 +1,12 @@
 class_name ExplorationEntryContext
 extends RefCounted
 
-## One transition request. Squad ownership remains with GameState.
-## Source and destination cells belong to different maps.
+## departure_cell is null for a non-grid source.
+## arrival_cell always belongs to the destination exploration grid.
 
 var source_scene: String
 var destination_scene: String
-var departure_cell: Vector2i
+var departure_cell: Variant
 var arrival_cell: Vector2i
 var main_squad: Squad
 
@@ -14,7 +14,7 @@ var main_squad: Squad
 func _init(
 	assigned_source: String,
 	assigned_destination: String,
-	assigned_departure: Vector2i,
+	assigned_departure: Variant,
 	assigned_arrival: Vector2i,
 	assigned_squad: Squad
 ) -> void:

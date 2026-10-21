@@ -19,10 +19,17 @@ var _presentation_source_was_visible: bool = true
 var _presentation_canvas_states: Array[Dictionary] = []
 
 var _exploration_cache: Dictionary = {}
+var _retained_city_scene: Node
+var _retained_city_process_mode: int = Node.PROCESS_MODE_INHERIT
 
 
 func register_main(main_node: Node) -> void:
 	_clear_exploration_cache()
+
+	if is_instance_valid(_retained_city_scene):
+		_retained_city_scene.free()
+
+	_retained_city_scene = null
 	_main = main_node
 
 
@@ -53,13 +60,18 @@ func change_game_scene(scene_path: String) -> Node:
 	_remove_active_game_presentation()
 	_clear_exploration_cache()
 
+	if is_instance_valid(_retained_city_scene):
+		_retained_city_scene.free()
+
+	_retained_city_scene = null
+
 	if is_instance_valid(_current_game_scene):
+		_current_game_scene.process_mode = Node.PROCESS_MODE_DISABLED
 		_current_game_scene.queue_free()
 
 	_current_game_scene = next_scene
 	_main.get_game_layer().add_child(next_scene)
 	return next_scene
-
 
 func travel_exploration(
 	source: Node,
@@ -377,3 +389,142 @@ func can_open_party_menu() -> bool:
 		and not is_instance_valid(_active_game_presentation)
 		and _overlay_stack.is_empty()
 	)
+
+func enter_exploration_from_city(
+	city_scene: Node,
+	destination_path: String,
+	arrival_cell: Vector2i
+) -> Node:
+	if (
+		not is_instance_valid(_main)
+		or not is_instance_valid(city_scene)
+		or city_scene != _current_game_scene
+		or not city_scene.can_process()
+		or not city_scene.has_method("can_enter_sewers")
+		or not bool(city_scene.call("can_enter_sewers"))
+	):
+		return null
+
+	if (
+		is_instance_valid(_active_game_presentation)
+		or not _overlay_stack.is_empty()
+		or is_instance_valid(_retained_city_scene)
+	):
+		return null
+
+	var main_squad: Squad = GameState.get_main_squad()
+
+	if main_squad == null or not main_squad.is_alive():
+		return null
+
+	var destination: Node = _exploration_cache.get(destination_path)
+	var reused: bool = is_instance_valid(destination)
+
+	if not reused:
+		var packed_scene: PackedScene = load(destination_path) as PackedScene
+
+		if packed_scene == null:
+			push_error("Could not load exploration map: " + destination_path)
+			return null
+
+		destination = packed_scene.instantiate()
+
+	var effective_arrival: Vector2i = arrival_cell
+
+	if reused:
+		var marker: TacticalPlayer = (
+			destination.get_node_or_null("PlayerMarker") as TacticalPlayer
+		)
+
+		if marker == null:
+			push_error("Cached exploration map has no TacticalPlayer.")
+			return null
+
+		effective_arrival = marker.cell
+
+	var context := ExplorationEntryContext.new(
+		city_scene.scene_file_path,
+		destination_path,
+		null,
+		effective_arrival,
+		main_squad
+	)
+
+	if not destination.has_method("prepare_exploration_entry"):
+		if not reused:
+			destination.free()
+
+		push_error("Destination lacks prepare_exploration_entry().")
+		return null
+
+	if not bool(destination.call("prepare_exploration_entry", context)):
+		if not reused:
+			destination.free()
+
+		push_warning("Destination rejected city exploration entry.")
+		return null
+
+	_retained_city_scene = city_scene
+	_retained_city_process_mode = int(city_scene.process_mode)
+
+	city_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	city_scene.get_parent().remove_child(city_scene)
+
+	_exploration_cache.erase(destination_path)
+	_current_game_scene = destination
+	_main.get_game_layer().add_child(destination)
+
+	if reused:
+		destination.process_mode = int(destination.get_meta(
+			"exploration_process_mode",
+			Node.PROCESS_MODE_INHERIT
+		))
+
+	if destination.has_method("on_exploration_entered"):
+		destination.call("on_exploration_entered", context)
+
+	print(
+		"[City] Entered ",
+		destination_path.get_file(),
+		" | arrival: ",
+		effective_arrival,
+		" | reused: ",
+		reused
+	)
+
+	return destination
+
+
+func return_to_city(source: Node) -> bool:
+	if (
+		not is_instance_valid(_main)
+		or not is_instance_valid(source)
+		or source != _current_game_scene
+		or not is_instance_valid(_retained_city_scene)
+		or is_instance_valid(_active_game_presentation)
+		or not _overlay_stack.is_empty()
+	):
+		return false
+
+	var source_path: String = source.scene_file_path
+
+	if source_path.is_empty():
+		push_error("Cannot cache a scene without a scene path.")
+		return false
+
+	source.set_meta("exploration_process_mode", int(source.process_mode))
+	source.process_mode = Node.PROCESS_MODE_DISABLED
+	source.get_parent().remove_child(source)
+	_exploration_cache[source_path] = source
+
+	var city_scene: Node = _retained_city_scene
+	_retained_city_scene = null
+	_current_game_scene = city_scene
+
+	_main.get_game_layer().add_child(city_scene)
+	city_scene.process_mode = _retained_city_process_mode
+
+	if city_scene.has_method("on_returned_from_exploration"):
+		city_scene.call("on_returned_from_exploration")
+
+	return true

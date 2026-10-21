@@ -676,21 +676,48 @@ func commit_dialogue_result(
 	var completion_flag: String = (
 		"dialogue/%s/completed" % definition.dialogue_id
 	)
-	var choice_flag: String = (
-		"dialogue/%s/choice/%s" % [
-			definition.dialogue_id,
-			choice_id
-		]
-	)
 
-	if has_flag(completion_flag):
+	if has_flag(completion_flag) and not definition.allow_replay:
 		return false
 
-	# Write the complete result before emitting notifications.
-	# Reentrant listeners therefore cannot commit a second answer.
-	flags[choice_flag] = true
-	flags[completion_flag] = true
+	var choice_prefix: String = (
+		"dialogue/%s/choice/" % definition.dialogue_id
+	)
+	var choice_flag: String = choice_prefix + String(choice_id)
+	var notifications: Array[Dictionary] = []
 
-	flag_changed.emit(choice_flag, true)
-	flag_changed.emit(completion_flag, true)
+	if definition.allow_replay:
+		for choice: DialogueChoice in definition.choices:
+			var previous_flag: String = (
+				choice_prefix + String(choice.choice_id)
+			)
+
+			if previous_flag != choice_flag and has_flag(previous_flag):
+				flags[previous_flag] = false
+				notifications.append({
+					"id": previous_flag,
+					"enabled": false
+				})
+
+	if not has_flag(choice_flag):
+		flags[choice_flag] = true
+		notifications.append({
+			"id": choice_flag,
+			"enabled": true
+		})
+
+	if not has_flag(completion_flag):
+		flags[completion_flag] = true
+		notifications.append({
+			"id": completion_flag,
+			"enabled": true
+		})
+
+	# All state is committed before any notification is emitted.
+	for notification: Dictionary in notifications:
+		flag_changed.emit(
+			String(notification["id"]),
+			bool(notification["enabled"])
+		)
+
 	return true

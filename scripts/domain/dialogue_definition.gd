@@ -1,12 +1,10 @@
 class_name DialogueDefinition
 extends Resource
 
-## Minimal contract: opening lines, one choice, one response.
-## More complex branching is deliberately outside this milestone.
-
 @export var dialogue_id: StringName = &""
 @export var lines: Array[DialogueLine] = []
 @export var choices: Array[DialogueChoice] = []
+@export var allow_replay: bool = false
 
 
 func validation_error() -> String:

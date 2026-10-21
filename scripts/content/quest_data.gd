@@ -1,5 +1,6 @@
 class_name QuestData
 extends RefCounted
+const GUILD_SEWER_QUEST_ID: String = "guild_sewer_investigation"
 
 ## Prototype quests for validating existing sewer gameplay.
 ## Not final Chapter 1 narrative or reward content.
@@ -55,6 +56,15 @@ static func _ensure_catalog() -> void:
 		"Clear corridor and junction."
 	)
 
+	_register(
+		GUILD_SEWER_QUEST_ID,
+		"[PROTOTYPE] Sewer investigation",
+		"Guild opdracht voor de bestaande sewer test-slice; "
+		+ "geen definitieve Chapter 1-opdracht.",
+		QuestObjective.Kind.LOCATION_CLEARED,
+		LocationData.SEWER_TEST_SLICE,
+		"Clear corridor and junction."
+	)
 
 static func _register(
 	quest_id: String,

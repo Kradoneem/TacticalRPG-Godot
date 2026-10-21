@@ -1,10 +1,11 @@
 class_name DialogueController
 extends Node
 
-## Owned by Main, outside GameLayer.
-## Reuses the existing GameLayer process-mode lock and Party blocker.
-
-signal finished(dialogue_id: StringName, committed: bool)
+signal finished(
+	dialogue_id: StringName,
+	choice_id: StringName,
+	committed: bool
+)
 signal cancelled(dialogue_id: StringName)
 
 const PARTY_BLOCK_REASON: StringName = &"dialogue"
@@ -52,18 +53,22 @@ func start_dialogue(definition: DialogueDefinition) -> bool:
 	):
 		return false
 
-	if not definition.validation_error().is_empty():
-		push_error(definition.validation_error())
+	var problem: String = definition.validation_error()
+
+	if not problem.is_empty():
+		push_error(problem)
 		return false
 
 	var completion_flag: String = (
 		"dialogue/%s/completed" % definition.dialogue_id
 	)
 
-	if bool(_state.call("has_flag", completion_flag)):
+	if (
+		not definition.allow_replay
+		and bool(_state.call("has_flag", completion_flag))
+	):
 		return false
 
-	# Party's existing gate also checks active scenes and modal contexts.
 	if not bool(_party_controller.call("can_open")):
 		return false
 
@@ -88,16 +93,16 @@ func _on_advance_requested() -> void:
 
 	if _session.phase == DialogueSession.Phase.FINISHED:
 		var dialogue_id: StringName = _session.definition.dialogue_id
-		var committed: bool = bool(
-			_state.call(
-				"commit_dialogue_result",
-				_session.definition,
-				_session.get_result_choice_id()
-			)
-		)
+		var choice_id: StringName = _session.get_result_choice_id()
+
+		var committed: bool = bool(_state.call(
+			"commit_dialogue_result",
+			_session.definition,
+			choice_id
+		))
 
 		_restore_gameplay()
-		finished.emit(dialogue_id, committed)
+		finished.emit(dialogue_id, choice_id, committed)
 		return
 
 	_panel.show_session(_session)
@@ -139,5 +144,4 @@ func _restore_gameplay() -> void:
 
 
 func _exit_tree() -> void:
-	# Also release our own lock if this controller is removed unexpectedly.
 	_restore_gameplay()

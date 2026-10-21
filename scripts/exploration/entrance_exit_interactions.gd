@@ -7,7 +7,7 @@ const ExitControllerScript = preload(
 )
 
 const CITY_SCENE_PATH: String = (
-	"res://scenes/exploration/city_return_test.tscn"
+	"res://scenes/city/city_screen.tscn"
 )
 const CORRIDOR_SCENE_PATH: String = (
 	"res://scenes/exploration/sewer_corridor_test.tscn"
@@ -100,16 +100,32 @@ func _on_travel_requested(
 	exit_data: ExplorationExitData,
 	departure_cell: Vector2i
 ) -> void:
+	if exit_data.exit_id == &"to_city":
+		call_deferred("_return_to_city")
+		return
+
 	var destination: Node = SceneManager.travel_exploration(
-		entrance, exit_data, departure_cell
+		entrance,
+		exit_data,
+		departure_cell
 	)
 
 	if destination == null:
 		_exits.recover_from_transition_error(
-			"Kamerwissel mislukt. Gebruik F5 en controleer Output."
+			"Kamerwissel mislukt. Controleer Output."
 		)
-
 
 func resume_exploration() -> void:
 	if _exits != null:
 		_exits.complete_transition()
+
+func _return_to_city() -> void:
+	if not SceneManager.return_to_city(entrance):
+		_exits.recover_from_transition_error(
+			"Terugkeer naar de stad mislukte. Controleer Output."
+		)
+		return
+
+	# The entrance is now detached and cannot receive world input.
+	# Clear the pending exit interaction before its later re-entry.
+	resume_exploration()
