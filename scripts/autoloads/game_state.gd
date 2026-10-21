@@ -655,3 +655,42 @@ func get_quest_log_ids() -> Array[String]:
 			ids.append(quest_id)
 
 	return ids
+
+func commit_dialogue_result(
+	definition: DialogueDefinition,
+	choice_id: StringName
+) -> bool:
+	if definition == null or not definition.validation_error().is_empty():
+		return false
+
+	var choice_exists: bool = false
+
+	for choice: DialogueChoice in definition.choices:
+		if choice.choice_id == choice_id:
+			choice_exists = true
+			break
+
+	if not choice_exists:
+		return false
+
+	var completion_flag: String = (
+		"dialogue/%s/completed" % definition.dialogue_id
+	)
+	var choice_flag: String = (
+		"dialogue/%s/choice/%s" % [
+			definition.dialogue_id,
+			choice_id
+		]
+	)
+
+	if has_flag(completion_flag):
+		return false
+
+	# Write the complete result before emitting notifications.
+	# Reentrant listeners therefore cannot commit a second answer.
+	flags[choice_flag] = true
+	flags[completion_flag] = true
+
+	flag_changed.emit(choice_flag, true)
+	flag_changed.emit(completion_flag, true)
+	return true
