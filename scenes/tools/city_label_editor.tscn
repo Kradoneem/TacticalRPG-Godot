@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://do2qyrxrf5ui1"]
+
+[ext_resource type="Script" uid="uid://bqnshhrsis17q" path="res://scripts/tools/city_label_editor.gd" id="1_obrix"]
+[ext_resource type="Resource" path="res://assets/city_layouts/castletown_labels_2026-10-21T19-28-54.tres" id="2_ap7yu"]
+[ext_resource type="Texture2D" uid="uid://0kvnr6ftxta0" path="res://assets/backgrounds/castletown.png" id="3_j4r2h"]
+
+[node name="CityLabelEditor" type="Node2D" unique_id=164067880]
+script = ExtResource("1_obrix")
+source_layout = ExtResource("2_ap7yu")
+background_texture = ExtResource("3_j4r2h")

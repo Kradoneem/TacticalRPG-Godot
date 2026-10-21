@@ -2,6 +2,11 @@ class_name CityScreen
 extends Control
 
 @export var city_background: Texture2D
+@export var city_layout: CityLayoutData
+
+var _layout_background: TextureRect
+var _layout_texture: Texture2D
+var _city_destinations: Array[CityDestination] = []
 
 var _title: Label
 var _status: Label
@@ -28,8 +33,18 @@ func _ready() -> void:
 	_build_screen()
 	_show_city()
 
-
 func _build_screen() -> void:
+	_layout_texture = city_background
+
+	if city_layout != null:
+		var problem: String = city_layout.validation_error()
+
+		if problem.is_empty():
+			_layout_texture = city_layout.background
+		else:
+			push_error("City layout ongeldig: " + problem)
+			city_layout = null
+
 	var background_color := ColorRect.new()
 	background_color.color = Color("#26343a")
 	background_color.set_anchors_and_offsets_preset(
@@ -38,14 +53,12 @@ func _build_screen() -> void:
 	background_color.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background_color)
 
-	if city_background != null:
-		var background := TextureRect.new()
-		background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		background.texture = city_background
-		background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(background)
+	_layout_background = TextureRect.new()
+	_layout_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_layout_background.stretch_mode = TextureRect.STRETCH_SCALE
+	_layout_background.texture = _layout_texture
+	_layout_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_layout_background)
 
 	var header := VBoxContainer.new()
 	header.position = Vector2(24.0, 20.0)
@@ -61,23 +74,15 @@ func _build_screen() -> void:
 	header.add_child(_status)
 
 	_locations_layer = Control.new()
-	_locations_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_locations_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_locations_layer)
 
-	for destination: CityDestination in CityData.get_destinations():
+	_city_destinations = CityData.get_destinations()
+
+	for destination: CityDestination in _city_destinations:
 		var button := Button.new()
 		button.text = destination.display_name
 		button.custom_minimum_size = Vector2(230.0, 56.0)
-
-		button.anchor_left = destination.position_ratio.x
-		button.anchor_right = destination.position_ratio.x
-		button.anchor_top = destination.position_ratio.y
-		button.anchor_bottom = destination.position_ratio.y
-		button.offset_left = -115.0
-		button.offset_right = 115.0
-		button.offset_top = -28.0
-		button.offset_bottom = 28.0
 
 		button.pressed.connect(
 			_on_destination_selected.bind(destination.destination_id)
@@ -104,7 +109,10 @@ func _build_screen() -> void:
 	_guild_content.add_theme_constant_override("separation", 18)
 	margin.add_child(_guild_content)
 
-
+	resized.connect(_update_city_layout)
+	_update_city_layout()
+	call_deferred("_update_city_layout")
+	
 func _show_city() -> void:
 	_viewing_guild = false
 	_selected_index = 0
@@ -119,11 +127,11 @@ func _show_city() -> void:
 		+ "Shop, Tavern, Castle en Home zijn nog niet geïmplementeerd."
 	)
 
-	if city_background == null:
+	if _layout_texture == null:
 		_status.text += "\nCity-background ontbreekt: layout-placeholder."
 
+	_update_city_layout()
 	_refresh_selection()
-
 
 func _show_guild() -> void:
 	_viewing_guild = true
@@ -380,3 +388,39 @@ func on_returned_from_exploration() -> void:
 	GameState.current_location = GameState.current_city
 	GameState.in_city = true
 	_show_city()
+
+func _update_city_layout() -> void:
+	if (
+		_layout_background == null
+		or _locations_layer == null
+	):
+		return
+
+	var image_rect: Rect2 = CityLayoutData.get_image_rect(
+		size,
+		_layout_texture
+	)
+
+	_layout_background.position = image_rect.position
+	_layout_background.size = image_rect.size
+
+	_locations_layer.position = image_rect.position
+	_locations_layer.size = image_rect.size
+
+	for index in range(_city_buttons.size()):
+		var destination: CityDestination = _city_destinations[index]
+		var position_ratio: Vector2 = destination.position_ratio
+
+		if city_layout != null:
+			position_ratio = city_layout.get_label_position(
+				destination.destination_id
+			)
+
+		var button: Button = _city_buttons[index]
+		var button_size: Vector2 = button.get_combined_minimum_size()
+
+		button.size = button_size
+		button.position = (
+			position_ratio * image_rect.size
+			- button_size * 0.5
+		)

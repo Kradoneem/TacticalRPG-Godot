@@ -1,4 +1,10 @@
-
+# City layouts
+- City scene en layouts getest, koppeling met sewer werkt
+- Art beschikbaar
+- Guildtest initialiseert CityScreen vóór callbacks die UI vernieuwen.
+- - City-background lokaal beschikbaar: `assets/backgrounds/castletown.png`.
+- Koppeling gebeurt via CityScreen.city_background in `scenes/city/city_screen.tscn`.
+- Asset nog niet op Git bevestigd; visuele aansluiting van de prototype-labelposities nog te valideren.
 
 
 # Minimale dialogue-loop bij sewer-entrance
@@ -27,7 +33,7 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 ## Status
 - Laatste gameplay-milestone: city selection en guild sewerquestacceptatie.
-  Commit-message: `feat: add city selection and guild sewer quest acceptance`.
+  Commit-message: `feat: add standalone city label editor and image-relative layout`.
   Commit-SHA nog invullen na verificatie van de push.
 - Automatische tests: quest-objectives en guild-quest door gebruiker geslaagd verklaard.
 - Handmatige city/guild- en city↔sewer-acceptatietests: nog niet afzonderlijk bevestigd.
@@ -126,10 +132,6 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 - City/guild-code aanwezig; automatische quest-objective- en guildtests geslaagd.
 - Handmatige city/guild-inputisolatie en city↔sewer-statebehoud nog afzonderlijk te bevestigen.
 - Quest-objectivetest activeert drie expliciete fixtures, niet de volledige catalogus.
-- Guildtest initialiseert CityScreen vóór callbacks die UI vernieuwen.
-- - City-background lokaal beschikbaar: `assets/backgrounds/castletown.png`.
-- Koppeling gebeurt via CityScreen.city_background in `scenes/city/city_screen.tscn`.
-- Asset nog niet op Git bevestigd; visuele aansluiting van de prototype-labelposities nog te valideren.
 - Guildquest gebruikt alleen de bestaande sewer test-slice corridor+junction, niet het volledige toekomstige dungeon.
 - Guild-inlevering, questrewards en verdere NPC-dialogue ontbreken.
 - Shops met Talk/Buy/Sell, world travel met tijdskosten en tavern-personenselectie zijn nog niet gebouwd.
