@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="TacticalGridProjection" format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/tactical_grid_projection.gd" id="1_1oupk"]
+
+[resource]
+script = ExtResource("1_1oupk")
+origin = Vector2(859.41174, 305.29407)
+axis_x = Vector2(95.64705, 53.647057)
+axis_y = Vector2(-75, 71.0294)
