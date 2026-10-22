@@ -156,7 +156,7 @@ World map [G] — gebouwd en getest.
 
 - Formation in Party is placeholder.
 - Niet gebouwd: equipment-granted abilities, start-/finishing-loadouts, classrestricties, durability, battle-itemgebruik, automatische itemstrategieën, revival, groepsheals/-buffs, buff-AI, dispels, drain, ingredientkosten, elemental resistances.
-- Niet gebouwd: NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate), treasure chests.
+- Niet gebouwd: NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate).
 - `change_game_scene` wist `_exploration_cache`; of sewer-positie/-state een wereldreis overleeft is niet gevalideerd (`defeated_enemy_squads` is globaal en blijft).
 - World map: `current_city`, `current_location` en `in_city` overlappen; gebruikers niet geïnventariseerd. Controleer met `grep -rn "current_city\|current_location\|in_city" scripts tests`.
 - Niet end-to-end gevalideerd: meerdere verbindingen tussen dezelfde maps; bewaarde maps accepteren hun opgeslagen vertrekcel.
