@@ -7,7 +7,9 @@ Werkafspraken staan in de projectpersona, niet hier.
 Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **[?]** niet gevalideerd of nog te bouwen.
 
 ## Status
-- Laatste geteste gameplay-milestone: **World map** (feat: add world map travel with explicit location context). [G] door gebruiker getest. Zet Shops ervoor in de plaats als "Daarvoor: Shops (796b416)".
+- Laatste geteste gameplay-milestone: **Tavern** (`feat: add tavern person selection with repeatable dialogue`). [G] door gebruiker getest.
+- Daarvoor: World map (`719925c`), Shops (`796b416`).
+- Volgende milestone [O]: treasure chests, daarna Chapter 1 refinen.
 - Volgorde [O]: world map → Tavern → treasure chests → Chapter 1 refinen.
 - Buiten deze volgorde: resterende Python-combatpariteit en Save/Load.
 - Combatuitbreidingen en art-polish blijven geparkeerd.
@@ -22,6 +24,7 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 | Milestone | Kern |
 |---|---|
+| Tavern | Door gebruiker getest. `TavernPerson`/`TavernDefinition` als Resources, `TavernData` (Aldenmoor, Barkeeper + Patron als prototypepersonen, geen lore), `TavernScreen` als subscreen onder `CityScreen` met personen op beeldrelatieve posities, herhaalbare dialogue via Main/DialogueController, `dialogue_result`-hook zonder gameplay-effecten, `CityScreen._sub_screen_open()` voor shop + tavern. Geen tijdskosten, gold, rest of rewards. `tests/test_tavern.gd` aanwezig. |
 | World map | Door gebruiker getest. WorldLocation + WorldMapData (Aldenmoor + 2 prototypelocaties, hub-topologie), GameState.travel_to_location (1 dag/verbinding via advance_day, geen GameplayClock-tick), WorldMapScreen (select/confirm), LocationStubScreen, SceneManager.change_game_scene(path, context) met prepare_location_entry, CityDestination.Kind.WORLD_MAP. tests/test_world_travel.gd aanwezig. |
 | Shops (`796b416`) | Door gebruiker getest. `ShopDefinition`/`ShopOffer` als Resources, `ShopData` koppelt stad + bestemming-ID, `ShopTransaction.resolve()` via `GameState.buy_shop_product`/`sell_shop_product`. `ShopScreen` (Talk / Buy / Sell, confirm-stap) onder `CityScreen`. Zie Ontwerpbesluiten → Shops. `tests/test_shops.gd` aanwezig. |
 | City selection + guild sewerquest | [Code aanwezig; automatische en handmatige tests geslaagd] CityScreen heeft selecteerbare bestemmingen zonder tactical grid. Guilddialogue ondersteunt accepteren/later; annuleren kent niets toe. Guild activeert expliciet de prototypequest voor corridor+junction via GameState. Geen rewards of sewer-toegangsgate. SceneManager heeft city↔sewer-overgangen met behoud van explorationcache. City-background is optioneel; zonder texture wordt een kleur-placeholder getoond. |
@@ -70,13 +73,27 @@ World map [G] — gebouwd en getest.
 - Koopprijzen zijn shopcontent, niet ItemData/EquipmentData.
 - Verkoopprijs is helft van plaatselijke koopprijs, naar beneden afgerond.
 - Alleen losse inventory en opgenomen shopproducten; uitgerust equipment eerst afleggen.
-- Flags beperken Buy; Sell van
 - Flags beperken Buy; Sell van opgenomen producten blijft mogelijk ongeacht kooplock.
 - Gold/inventory worden vóór signals samen gecommit; aankoop valideert flags opnieuw.
 - Talk gebruikt bestaande herhaalbare dialogue; geen questtoekenning/inlevering gebouwd.
 - Aldenmoor-prijzen zijn nieuw prototypecontent, geen Python-migratie of definitieve balans.
 - Geen tijdskosten; geen nieuwe startvoorraad/gold; geen restockstate.
 - Cross-city handelswinst is mogelijk bij toekomstige prijsverschillen; nog geen economische regels toegevoegd.
+
+**Tavern [G] — gebouwd en getest**
+- TavernScreen is een subscreen onder dezelfde CityScreen-instance, zoals ShopScreen.
+- TavernDefinition en TavernPerson zijn Resources; TavernData koppelt stad + bestemming-ID.
+- Aldenmoor krijgt twee expliciete prototypepersonen: Barkeeper en Patron. Geen Chapter 1-lore.
+- Personen hebben beeldrelatieve labelposities en herhaalbare DialogueDefinitions.
+- Background is optioneel; zonder interieurasset gebruikt het screen een kleur-placeholder.
+- Persoonselectie emit talk_requested; CityScreen blijft de aanvrager van Main.request_dialogue.
+- CityScreen routeert finished naar het open subscreen; TavernScreen emit dialogue_result als hook zonder gameplay-effecten.
+- Annuleren verandert geen flags; bestaande DialogueController herstelt input. Tavernselectie blijft staan.
+- Back to city sluit het subscreen zonder scene-overgang of wijziging van world_location_id.
+- Party beschikbaar in Tavern; niet tijdens actieve dialogue.
+- Geen rusten/herstel, tijdskosten, gold, drankjes, geruchten, rekrutering, quests of rewards.
+- Geen nieuwe Autoload, SceneManager-route of gedeelde UI-abstractie.
+- tests/test_tavern.gd aanwezig; automatische en handmatige tests geslaagd (door gebruiker getest).
 
 **Dialogue**
 - Bestaande entrance-dialogue blijft one-shot.
@@ -120,7 +137,7 @@ World map [G] — gebouwd en getest.
 
 - Formation in Party is placeholder.
 - Niet gebouwd: equipment-granted abilities, start-/finishing-loadouts, classrestricties, durability, battle-itemgebruik, automatische itemstrategieën, revival, groepsheals/-buffs, buff-AI, dispels, drain, ingredientkosten, elemental resistances.
-- Niet gebouwd: NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate), Tavern-personenselectie, treasure chests.
+- Niet gebouwd: NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate), treasure chests.
 - `change_game_scene` wist `_exploration_cache`; of sewer-positie/-state een wereldreis overleeft is niet gevalideerd (`defeated_enemy_squads` is globaal en blijft).
 - World map: `current_city`, `current_location` en `in_city` overlappen; gebruikers niet geïnventariseerd. Controleer met `grep -rn "current_city\|current_location\|in_city" scripts tests`.
 - `city_screen.tscn` koppelt alleen `city_background`; `city_layout` (labelpositie-`.tres`) gekoppeld aan assets/city_layouts/castletown_labels_2026-10-22T11-25-27.tres. Bestemming `world_map` heeft een placeholderpositie.
@@ -134,13 +151,17 @@ World map [G] — gebouwd en getest.
 - Quest-objectivetest activeert drie expliciete fixtures, niet de volledige catalogus.
 - Guildquest gebruikt alleen de bestaande sewer test-slice corridor+junction, niet het volledige toekomstige dungeon.
 - Guild-inlevering, questrewards en verdere NPC-dialogue ontbreken.
+- Tavern: geen interieurasset (kleur-placeholder), geen label editor, personen zijn placeholders zonder lore; echte NPC's horen bij Chapter 1 refinen.
+- Tavern-dialogues vereisen minimaal twee keuzes (`DialogueDefinition.validation_error()`).
+- De logica "knoppen op beeldratio's + selectie" staat nu in CityScreen, WorldMapScreen en TavernScreen; extractie is backlog.
+- Testnoot: een testscript mag scripts die een autoload bij naam gebruiken (zoals `CityScreen`) niet op compile-tijd refereren; laad ze runtime (`load(...)` binnen `_run`).
 
 ## City layouts
 - City scene en layouts getest, koppeling met sewer werkt.
 - Art beschikbaar.
 - Guildtest initialiseert CityScreen vóór callbacks die UI vernieuwen.
-- City-background lokaal beschikbaar: `assets/backgrounds/castletown.png`.
-- Koppeling gebeurt via `CityScreen.city_background` in `scenes/city/city_screen.tscn`.
+- CityScreen gebruikt city_background en de gekoppelde city_layout: assets/city_layouts/castletown_labels_2026-10-22T11-25-27.tres. world_map heeft daarin een eigen labelpositie.
+- Koppeling gebeurt via CityScreen.city_background en CityScreen.city_layout in scenes/city/city_screen.tscn.
 
 ## Minimale dialogue-loop bij sewer-entrance
 - DialogueLine, DialogueChoice en DialogueDefinition zijn Resources.

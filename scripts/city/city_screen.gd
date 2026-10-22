@@ -22,8 +22,10 @@ var _viewing_guild: bool = false
 var _transitioning: bool = false
 var _page_frame: int = -1
 var _shop_screen: ShopScreen
+var _tavern_screen: TavernScreen
 
 var _location: WorldLocation
+
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -44,6 +46,13 @@ func _ready() -> void:
 
 	_shop_screen.closed.connect(_show_city)
 	_shop_screen.talk_requested.connect(_on_shop_talk_requested)
+
+	_tavern_screen = TavernScreen.new()
+	_tavern_screen.name = "TavernScreen"
+	add_child(_tavern_screen)
+
+	_tavern_screen.closed.connect(_show_city)
+	_tavern_screen.talk_requested.connect(_on_tavern_talk_requested)
 
 	_show_city()
 
@@ -127,7 +136,6 @@ func _build_screen() -> void:
 	_update_city_layout()
 	call_deferred("_update_city_layout")
 	
-
 func _show_city() -> void:
 	_viewing_guild = false
 	_selected_index = 0
@@ -140,7 +148,7 @@ func _show_city() -> void:
 
 	_status.text = (
 		"WASD/pijltjes: selecteren | Enter/Spatie: openen | Escape: Party\n"
-		+ "Tavern, Castle en Home zijn nog niet geïmplementeerd."
+		+ "Castle en Home zijn nog niet geïmplementeerd."
 	)
 
 	if _layout_texture == null:
@@ -148,7 +156,7 @@ func _show_city() -> void:
 
 	_update_city_layout()
 	_refresh_selection()
-
+	
 func _show_guild() -> void:
 	_viewing_guild = true
 	_selected_index = 0
@@ -263,10 +271,13 @@ func _confirm_selection() -> void:
 
 	buttons[_selected_index].pressed.emit()
 
-
 func _input(event: InputEvent) -> void:
-	if _shop_screen != null and _shop_screen.is_open():
-		_shop_screen.handle_menu_input(event)
+	if _sub_screen_open():
+		if _shop_screen != null and _shop_screen.is_open():
+			_shop_screen.handle_menu_input(event)
+		elif _tavern_screen != null and _tavern_screen.is_open():
+			_tavern_screen.handle_menu_input(event)
+
 		return
 
 	if not event is InputEventKey:
@@ -299,10 +310,12 @@ func _input(event: InputEvent) -> void:
 	elif event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
 		_confirm_selection()
 
+
 func _on_destination_selected(destination_id: StringName) -> void:
 	if (
 		_transitioning
-		or (_shop_screen != null and _shop_screen.is_open())
+		or _sub_screen_open()
+		or not can_process()
 	):
 		return
 
@@ -327,9 +340,21 @@ func _on_destination_selected(destination_id: StringName) -> void:
 				_locations_layer.hide()
 				_guild_panel.hide()
 			else:
-				_status.text = (
-					"Shop ontbreekt of heeft ongeldige content."
+				_status.text = "Shop ontbreekt of heeft ongeldige content."
+
+		CityDestination.Kind.TAVERN:
+			var tavern: TavernDefinition = (
+				TavernData.get_tavern_for_destination(
+					GameState.current_city,
+					destination_id
 				)
+			)
+
+			if _tavern_screen.open_tavern(tavern):
+				_locations_layer.hide()
+				_guild_panel.hide()
+			else:
+				_status.text = "Tavern ontbreekt of heeft ongeldige content."
 
 		CityDestination.Kind.SEWERS:
 			_enter_sewers()
@@ -366,18 +391,25 @@ func _on_talk_to_guild_clerk() -> void:
 	)):
 		_status.text = "Dialogue kon niet starten. Controleer Output."
 
-
 func on_dialogue_finished(
 	dialogue_id: StringName,
 	choice_id: StringName,
 	committed: bool
 ) -> void:
-	if _shop_screen != null and _shop_screen.is_open():
-		_shop_screen.on_dialogue_finished(
-			dialogue_id,
-			choice_id,
-			committed
-		)
+	if _sub_screen_open():
+		if _shop_screen != null and _shop_screen.is_open():
+			_shop_screen.on_dialogue_finished(
+				dialogue_id,
+				choice_id,
+				committed
+			)
+		elif _tavern_screen != null and _tavern_screen.is_open():
+			_tavern_screen.on_dialogue_finished(
+				dialogue_id,
+				choice_id,
+				committed
+			)
+
 		return
 
 	if dialogue_id != DialogueData.GUILD_SEWER_DIALOGUE_ID:
@@ -419,9 +451,8 @@ func can_enter_sewers() -> bool:
 		not _transitioning
 		and not _viewing_guild
 		and can_process()
-		and not (_shop_screen != null and _shop_screen.is_open())
+		and not _sub_screen_open()
 	)
-
 
 func can_open_party_menu() -> bool:
 	return (
@@ -511,9 +542,8 @@ func can_open_world_map() -> bool:
 		not _transitioning
 		and not _viewing_guild
 		and can_process()
-		and not (_shop_screen != null and _shop_screen.is_open())
+		and not _sub_screen_open()
 	)
-
 
 func _open_world_map() -> void:
 	if not can_open_world_map():
@@ -533,3 +563,32 @@ func _perform_world_map_open() -> void:
 	if next == null:
 		_transitioning = false
 		_status.text = "World map openen mislukt. Controleer Output."
+
+func _sub_screen_open() -> bool:
+	return (
+		(_shop_screen != null and _shop_screen.is_open())
+		or (_tavern_screen != null and _tavern_screen.is_open())
+	)
+
+
+func _on_tavern_talk_requested(definition: DialogueDefinition) -> void:
+	if (
+		_transitioning
+		or not can_process()
+		or _tavern_screen == null
+		or not _tavern_screen.is_open()
+	):
+		return
+
+	var main: Node = get_tree().current_scene
+
+	if main == null or not main.has_method("request_dialogue"):
+		push_warning("Tavern Talk requires Main.")
+		return
+
+	if not bool(main.call(
+		"request_dialogue",
+		self,
+		definition
+	)):
+		push_warning("Tavern Talk kon niet starten.")
