@@ -47,10 +47,15 @@ static func get_destinations() -> Array[CityDestination]:
 		Vector2(0.72, 0.78),
 		CityDestination.Kind.SEWERS
 	))
+	results.append(_make(
+		&"world_map",
+		"World map",
+		Vector2(0.50, 0.90),
+		CityDestination.Kind.WORLD_MAP
+	))
 
 	return results
-
-
+	
 static func get_destination(
 	destination_id: StringName
 ) -> CityDestination:

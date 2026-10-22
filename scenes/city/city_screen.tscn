@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://u2odkaivb4jf" path="res://scripts/city/city_screen.gd" id="1_city"]
 [ext_resource type="Texture2D" uid="uid://0kvnr6ftxta0" path="res://assets/backgrounds/castletown.png" id="2_55f1n"]
+[ext_resource type="Resource" path="res://assets/city_layouts/castletown_labels_2026-10-22T11-25-27.tres" id="3_26qrj"]
 
 [node name="CityScreen" type="Control" unique_id=1615047379]
 layout_mode = 3
@@ -12,3 +13,4 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_city")
 city_background = ExtResource("2_55f1n")
+city_layout = ExtResource("3_26qrj")

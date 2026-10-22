@@ -47,6 +47,7 @@ var defeated_enemy_squads: Dictionary = {}
 ## Existing quest_states remains quest ID -> status string.
 var quest_objective_states: Dictionary = {}
 var gameplay_clock: GameplayClock = GameplayClock.new()
+var world_location_id: StringName = WorldMapData.ALDENMOOR_ID
 
 func start_new_game() -> void:
 	party = UnitDataFactory.create_chapter_one_party()
@@ -65,6 +66,7 @@ func start_new_game() -> void:
 	current_city = "Aldenmoor"
 	current_location = "Aldenmoor"
 	in_city = true
+	world_location_id = WorldMapData.ALDENMOOR_ID
 
 	flags.clear()
 	quest_states.clear()
@@ -748,3 +750,37 @@ func sell_shop_product(
 		product_id,
 		true
 	)
+
+func travel_to_location(destination_id: StringName) -> Dictionary:
+	## Validates fully before mutating. Does not tick the GameplayClock.
+	var destination: WorldLocation = WorldMapData.get_location(destination_id)
+
+	if destination == null:
+		return {"success": false, "message": "Onbekende locatie."}
+
+	var problem: String = destination.validation_error()
+
+	if not problem.is_empty():
+		return {"success": false, "message": problem}
+
+	if destination_id == world_location_id:
+		return {"success": false, "message": "Je bent hier al."}
+
+	if not WorldMapData.are_connected(world_location_id, destination_id):
+		return {
+			"success": false,
+			"message": "%s is niet verbonden met je huidige locatie."
+				% destination.display_name
+		}
+
+	# Commit location first, then the day signal sees consistent state.
+	world_location_id = destination_id
+	advance_day(WorldMapData.TRAVEL_DAYS, "travel:%s" % destination_id)
+
+	return {
+		"success": true,
+		"message": "Gereisd naar %s (%d dag(en))." % [
+			destination.display_name,
+			roundi(WorldMapData.TRAVEL_DAYS)
+		]
+	}

@@ -43,8 +43,10 @@ func _clear_exploration_cache() -> void:
 
 	_exploration_cache.clear()
 
-
-func change_game_scene(scene_path: String) -> Node:
+func change_game_scene(
+	scene_path: String,
+	context: Variant = null
+) -> Node:
 	if not is_instance_valid(_main):
 		push_error("SceneManager has no registered Main node.")
 		return null
@@ -56,6 +58,17 @@ func change_game_scene(scene_path: String) -> Node:
 		return null
 
 	var next_scene: Node = packed_scene.instantiate()
+
+	# Before any teardown, and before _ready: a rejection leaves
+	# the current scene, cache and presentation untouched.
+	if context != null:
+		if (
+			not next_scene.has_method("prepare_location_entry")
+			or not bool(next_scene.call("prepare_location_entry", context))
+		):
+			push_warning("Scene rejected its location context: " + scene_path)
+			next_scene.free()
+			return null
 
 	_remove_active_game_presentation()
 	_clear_exploration_cache()

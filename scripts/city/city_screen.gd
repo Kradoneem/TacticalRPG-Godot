@@ -23,11 +23,17 @@ var _transitioning: bool = false
 var _page_frame: int = -1
 var _shop_screen: ShopScreen
 
+var _location: WorldLocation
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	GameState.current_city = CityData.CITY_NAME
-	GameState.current_location = GameState.current_city
+	# Without context (direct launch, tests): Aldenmoor.
+	if _location == null:
+		_location = WorldMapData.get_location(WorldMapData.ALDENMOOR_ID)
+
+	GameState.current_city = _location.display_name
+	GameState.current_location = _location.display_name
 	GameState.in_city = true
 
 	_build_screen()
@@ -40,7 +46,7 @@ func _ready() -> void:
 	_shop_screen.talk_requested.connect(_on_shop_talk_requested)
 
 	_show_city()
-	
+
 func _build_screen() -> void:
 	_layout_texture = city_background
 
@@ -328,6 +334,9 @@ func _on_destination_selected(destination_id: StringName) -> void:
 		CityDestination.Kind.SEWERS:
 			_enter_sewers()
 
+		CityDestination.Kind.WORLD_MAP:
+			_open_world_map()
+
 		_:
 			_status.text = (
 				"%s is nog niet geïmplementeerd."
@@ -426,11 +435,10 @@ func can_open_party_menu() -> bool:
 func can_show_quest_updates() -> bool:
 	return not _transitioning
 
-
 func on_returned_from_exploration() -> void:
 	_transitioning = false
-	GameState.current_city = CityData.CITY_NAME
-	GameState.current_location = GameState.current_city
+	GameState.current_city = _location.display_name
+	GameState.current_location = _location.display_name
 	GameState.in_city = true
 	_show_city()
 
@@ -483,3 +491,45 @@ func _on_shop_talk_requested(definition: DialogueDefinition) -> void:
 		definition
 	)):
 		push_warning("Shop Talk kon niet starten.")
+
+func prepare_location_entry(location: WorldLocation) -> bool:
+	# CityScreen is Aldenmoor-only; another city needs its own design.
+	if (
+		location == null
+		or location.kind != WorldLocation.Kind.CITY
+		or location.location_id != WorldMapData.ALDENMOOR_ID
+		or location.location_id != GameState.world_location_id
+	):
+		push_warning("CityScreen weigert deze locatie.")
+		return false
+
+	_location = location
+	return true
+
+func can_open_world_map() -> bool:
+	return (
+		not _transitioning
+		and not _viewing_guild
+		and can_process()
+		and not (_shop_screen != null and _shop_screen.is_open())
+	)
+
+
+func _open_world_map() -> void:
+	if not can_open_world_map():
+		return
+
+	# Deferred: never change the scene tree inside a Button callback.
+	_transitioning = true
+	_status.text = "World map openen..."
+	call_deferred("_perform_world_map_open")
+
+
+func _perform_world_map_open() -> void:
+	var next: Node = SceneManager.change_game_scene(
+		WorldMapData.WORLD_MAP_SCENE
+	)
+
+	if next == null:
+		_transitioning = false
+		_status.text = "World map openen mislukt. Controleer Output."

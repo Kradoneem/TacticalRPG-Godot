@@ -16,7 +16,6 @@ var dialogue_controller: DialogueController
 var _quest_banner: QuestUpdateBanner
 var _dialogue_request_source: Node
 
-
 func _ready() -> void:
 	GameState.start_new_game()
 	SceneManager.register_main(self)
@@ -42,13 +41,23 @@ func _ready() -> void:
 	add_child(_quest_banner)
 	_quest_banner.configure(_can_show_quest_updates)
 
-	SceneManager.change_game_scene(START_SCENE_PATH)
+	var start_location: WorldLocation = WorldMapData.get_location(
+		GameState.world_location_id
+	)
+
+	if (
+		start_location == null
+		or SceneManager.change_game_scene(
+			start_location.scene_path,
+			start_location
+		) == null
+	):
+		push_error("Main kon de startlocatie niet openen.")
 
 	if enable_test_quests:
 		for quest_id: String in QuestData.get_all_quest_ids():
 			if quest_id != QuestData.GUILD_SEWER_QUEST_ID:
 				GameState.activate_quest(quest_id)
-
 
 func request_dialogue(
 	source: Node,

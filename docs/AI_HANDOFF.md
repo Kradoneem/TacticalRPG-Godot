@@ -1,68 +1,29 @@
-**Shops [O]**
-- Eigen ShopDefinition per shop; ShopData koppelt stad + bestemming-ID.
-- Consumables en equipment; onbeperkte voorraad; één exemplaar per bevestiging.
-- Koopprijzen zijn shopcontent, niet ItemData/EquipmentData.
-- Verkoopprijs is helft van plaatselijke koopprijs, naar beneden afgerond.
-- Alleen losse inventory en opgenomen shopproducten; uitgerust equipment eerst afleggen.
-- Flags beperken Buy; Sell van opgenomen producten blijft mogelijk ongeacht kooplock.
-- Gold/inventory worden vóór signals samen gecommit; aankoop valideert flags opnieuw.
-- Talk gebruikt bestaande herhaalbare dialogue; geen questtoekenning/inlevering gebouwd.
-- Aldenmoor-prijzen zijn nieuw prototypecontent, geen Python-migratie of definitieve balans.
-- Geen tijdskosten; geen nieuwe startvoorraad/gold; geen restockstate.
-- Cross-city handelswinst is mogelijk bij toekomstige prijsverschillen; nog geen economische regels toegevoegd.
-
-# City layouts
-- City scene en layouts getest, koppeling met sewer werkt
-- Art beschikbaar
-- Guildtest initialiseert CityScreen vóór callbacks die UI vernieuwen.
-- - City-background lokaal beschikbaar: `assets/backgrounds/castletown.png`.
-- Koppeling gebeurt via CityScreen.city_background in `scenes/city/city_screen.tscn`.
-- Asset nog niet op Git bevestigd; visuele aansluiting van de prototype-labelposities nog te valideren.
-
-
-# Minimale dialogue-loop bij sewer-entrance
-
-- DialogueLine, DialogueChoice en DialogueDefinition zijn Resources.
-- DialogueSession bewaart tijdelijke voortgang zonder wereld-/UI-dependencies.
-- Prototype: opening → één keuze → reactie → afronden.
-- DialogueController leeft onder Main, buiten GameLayer; geen nieuwe Autoload.
-- Bestaande GameLayer-process-mode en Party-blocker worden gebruikt.
-- Escape annuleert zonder resultaat; alleen afronding commit de keuze.
-- GameState bewaart completion en gekozen antwoord in bestaande flags.
-- Resultaat wordt eenmaal vastgelegd en blijft bij kamerwisselingen behouden.
-- Nieuwe game reset flags; disk-save/load is niet geïmplementeerd.
-- Entrance-interactie op (3,3)/(4,3), met Enter/Spatie, getest via Main.
-- Questbanner wacht tijdens dialogue.
-- Geen rewards, statbonussen, definitieve lore of uitgebreide branching.
-- Teststatus: automatische en handmatige tests geslaagd.
-
 # AI Handoff — TacticalRPG-Godot
 
-Bijgewerkt: 21 oktober 2026. Volledige historie en oude persona-patch: `docs/archive/AI_HANDOFF_2026-10-21_full.md`.
-Lore en Chapter 1: `docs/AI-BG-Handoff.md`.
+Bijgewerkt: 22 oktober 2026. Volledige historie en oude persona-patch: `docs/archive/AI_HANDOFF_2026-10-21_full.md`.
+Lore en Chapter 1: `docs/AI-BG-handoff.md`.
 Werkafspraken staan in de projectpersona, niet hier.
 
 Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **[?]** niet gevalideerd of nog te bouwen.
 
 ## Status
-- Laatste gameplay-milestone: city selection en guild sewerquestacceptatie.
-  Commit-message: `feat: add standalone city label editor and image-relative layout`.
-  Commit-SHA nog invullen na verificatie van de push.
-- Automatische tests: quest-objectives en guild-quest door gebruiker geslaagd verklaard.
-- Handmatige city/guild- en city↔sewer-acceptatietests: nog niet afzonderlijk bevestigd.
-- Volgende richting: shops, world travel en tavern; concrete volgende milestone nog niet gekozen.
+- Laatste geteste gameplay-milestone: **World map** (feat: add world map travel with explicit location context). [G] door gebruiker getest. Zet Shops ervoor in de plaats als "Daarvoor: Shops (796b416)".
+- Volgorde [O]: world map → Tavern → treasure chests → Chapter 1 refinen.
+- Buiten deze volgorde: resterende Python-combatpariteit en Save/Load.
 - Combatuitbreidingen en art-polish blijven geparkeerd.
 - Repo: https://github.com/Kradoneem/TacticalRPG-Godot · branch `main` · lokaal `~/tactical-rpg`.
 - Python-bron: https://github.com/Kradoneem/TacticalRPG
   (`skill.py`, `skill_data.py`, `unit.py`, `game_state.py`, `party_menu.py`, `battle.py`, `battle_scene.py`, `battle_results_scene.py`).
-- Laatste gameplay-commit: `c3f5d26 — feat: enable manual ally healing and consolidate battle commands`.
-  Teststatus: automatische en handmatige tests geslaagd.
-- **Volgende milestone: nog niet gekozen.** Herijken tegen actuele code en Python-migratie. Geen art- of battle-polish.
+  `game_state.py` kent geen dag, locatie of reizen: de world map is nieuw Godot-ontwerp, geen migratie.
+- City selection + guild sewerquest: commit-message `feat: add standalone city label editor and image-relative layout`; commit-SHA niet geverifieerd.
+- Handmatige city/guild- en city↔sewer-acceptatietests: niet afzonderlijk bevestigd.
 
 ## Afgeronde milestones (nieuwste eerst) — alle [G]
 
 | Milestone | Kern |
 |---|---|
+| World map | Door gebruiker getest. WorldLocation + WorldMapData (Aldenmoor + 2 prototypelocaties, hub-topologie), GameState.travel_to_location (1 dag/verbinding via advance_day, geen GameplayClock-tick), WorldMapScreen (select/confirm), LocationStubScreen, SceneManager.change_game_scene(path, context) met prepare_location_entry, CityDestination.Kind.WORLD_MAP. tests/test_world_travel.gd aanwezig. |
+| Shops (`796b416`) | Door gebruiker getest. `ShopDefinition`/`ShopOffer` als Resources, `ShopData` koppelt stad + bestemming-ID, `ShopTransaction.resolve()` via `GameState.buy_shop_product`/`sell_shop_product`. `ShopScreen` (Talk / Buy / Sell, confirm-stap) onder `CityScreen`. Zie Ontwerpbesluiten → Shops. `tests/test_shops.gd` aanwezig. |
 | City selection + guild sewerquest | [Code aanwezig; automatische en handmatige tests geslaagd] CityScreen heeft selecteerbare bestemmingen zonder tactical grid. Guilddialogue ondersteunt accepteren/later; annuleren kent niets toe. Guild activeert expliciet de prototypequest voor corridor+junction via GameState. Geen rewards of sewer-toegangsgate. SceneManager heeft city↔sewer-overgangen met behoud van explorationcache. City-background is optioneel; zonder texture wordt een kleur-placeholder getoond. |
 | Handmatige single-ally healing (`c3f5d26`) | Healing, damage en Attack Support delen één targetselectie. `AbilityResolver` valideert opnieuw en voert kosten/effect eenmaal uit. Annuleren of ongeldig target kost niets. Zelf-healing mag bij gewonde caster. `BattleScene` geeft `GameState.gameplay_clock` aan `BattleSession`. Compat-entrypoints `begin_enemy_target_selection`, `confirm_enemy_target` en `_on_enemy_target_selected` blijven bestaan. |
 | Gameplayklok + Attack Support-buff | Eén `GameplayClock` in `GameState`, geen realtime Timer. Eén tick per volledig afgehandelde tactical ronde; afgebroken rondes en side-view geven geen tick. Exploration telt alleen geldige Main Squad-stappen. Attack Support: single living ally, +3 Attack, 4 MP, duur 5 ticks bij Wisdom 10, ±1 per 5 Wisdom verschil (naar nul afgerond, minimum 1). Duur en bonus worden gesnapshot; hetzelfde buff-ID vervangt en herstart. Attack = basis + equipment + buffs. |
@@ -79,9 +40,19 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 ## Ontwerpbesluiten [O]
 
-**World map, city en gebouwen — actuele gebruikerskeuze**
-- World map: locatienodes; huidige locatie zichtbaar; een andere locatie selecteren en reizen kost tijd.
-- City: selectiescreen met prerendered stadsbeeld en labels op relevante gebouwen. Geen tactical grid of squadmovement.
+World map [G] — gebouwd en getest.
+- Locaties: Aldenmoor + twee expliciet gemarkeerde prototypelocaties ("Prototype Location A/B", `is_prototype`, geen lore). Topologie (aanname): hub Aldenmoor↔A en Aldenmoor↔B; geen A↔B; alleen directe verbindingen zijn kiesbaar, geen multi-hop.
+- Reizen kost voorlopig 1 dag per verbinding (`WorldMapData.TRAVEL_DAYS`, constante) via `GameState.advance_day()`. Reizen tickt de `GameplayClock` niet. Dagtijd en kosten per verbinding zijn niet vastgesteld.
+- Flow: world map toont huidige locatie; bestemming selecteren → confirm → `GameState.travel_to_location()`. Annuleren en "Terug" veranderen locatie en dag niet. Geen tactical grid op de world map.
+- State: `GameState.world_location_id` is de bron van waarheid voor de wereldpositie; alleen `travel_to_location()` muteert die.
+- Contract: `WorldLocation` (Resource) + `WorldMapData` (content). Niet verwarren met `LocationData` (combat-clear-manifests). `SceneManager.change_game_scene(path, context)` roept `prepare_location_entry(context) -> bool` aan na `instantiate()` en vóór teardown/`_ready`; weigering laat de huidige scene intact. Scenes met locatiecontext: `can_open_party_menu()`, `can_show_quest_updates()`.
+- Bestemmingstype bepaalt de scene: `CITY` → `CityScreen`, `PROTOTYPE_STUB` → `LocationStubScreen`. `CityScreen` weigert alles behalve Aldenmoor (expliciete guard). Zonder context valt `CityScreen` terug op Aldenmoor (directe lancering, tests).
+- Party: beschikbaar op world map en stub, niet tijdens de reisbevestiging.
+- Volgorde: world map → Tavern → treasure chests → Chapter 1 refinen.
+- Niet in deze milestone: tweede stad (`CityData`/`ShopData`/`CityScreen` per stad), reiskosten in gold, reisevents/encounters, dagtijd, routelijnen/art, multi-hop, cache-behoud over wereldreizen, save/load.
+
+**Wereld, city en gebouwen — gebruikerskeuze**
+- City: selectiescreen met prerendered stadsbeeld en labels op relevante gebouwen. Geen tactical grid of squadmovement. `CityDestination.Kind.WORLD_MAP` (bestemming `world_map`) opent de world map; positie is een placeholder.
 - Dungeon: bestaande grid-gebaseerde exploration/alert-loop blijft behouden.
 - Shop: eigen shopping screen met Talk / Buy / Sell; eigenaardialogue moet questinteracties kunnen ondersteunen.
 - Tavern: eigen prerendered interieur met selecteerbare personen die dialogue starten.
@@ -90,8 +61,22 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 - Castle en overige guilds: interacties nog niet uitgewerkt.
 - World-locatie, stadsgebouw en dungeonkamer zijn verschillende contexten; geen fictieve city-gridcel gebruiken.
 - Questacceptatie en sewer-toegang zijn afzonderlijke regels; er is geen questgate toegevoegd.
-- Reistijdwaarden, tijdskosten binnen de stad en de relatie tussen dagtijd en GameplayClock zijn nog niet vastgesteld.
+- Tijdskosten binnen de stad en de relatie tussen dagtijd en GameplayClock zijn nog niet vastgesteld.
 - Shopspecificieke prijzen en voorwaarden horen niet in ItemData of SkillData.
+
+**Shops [G] — gebouwd en getest (`796b416`)**
+- Eigen ShopDefinition per shop; ShopData koppelt stad + bestemming-ID.
+- Consumables en equipment; onbeperkte voorraad; één exemplaar per bevestiging.
+- Koopprijzen zijn shopcontent, niet ItemData/EquipmentData.
+- Verkoopprijs is helft van plaatselijke koopprijs, naar beneden afgerond.
+- Alleen losse inventory en opgenomen shopproducten; uitgerust equipment eerst afleggen.
+- Flags beperken Buy; Sell van
+- Flags beperken Buy; Sell van opgenomen producten blijft mogelijk ongeacht kooplock.
+- Gold/inventory worden vóór signals samen gecommit; aankoop valideert flags opnieuw.
+- Talk gebruikt bestaande herhaalbare dialogue; geen questtoekenning/inlevering gebouwd.
+- Aldenmoor-prijzen zijn nieuw prototypecontent, geen Python-migratie of definitieve balans.
+- Geen tijdskosten; geen nieuwe startvoorraad/gold; geen restockstate.
+- Cross-city handelswinst is mogelijk bij toekomstige prijsverschillen; nog geen economische regels toegevoegd.
 
 **Dialogue**
 - Bestaande entrance-dialogue blijft one-shot.
@@ -113,8 +98,8 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 - Movement en initiative (gewenste regels, niet verzinnen, eerst bestaande code lezen): movement hangt af van de langzaamste levende unit plus bonus voor minder leden; initiative combineert gemiddelde speed met kleine-squadbonus.
 
 **Party-beschikbaarheid**
-- Beschikbaar op sewer, stad en toekomstige locaties.
-- Niet tijdens tactical alert, tactical acties, strategy selection, battle, actieve dialogue, modal exitinteractie, pending transitions of geregistreerde SceneManager-overlays.
+- Beschikbaar op sewer, stad, world map en toekomstige locaties.
+- Niet tijdens tactical alert, tactical acties, strategy selection, battle, actieve dialogue, modal exitinteractie, shop- of reisbevestiging, pending transitions of geregistreerde SceneManager-overlays.
 - `set_blocked(reason, blocked)` is het aansluitpunt voor modal systemen.
 
 **Battle**
@@ -135,19 +120,41 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 - Formation in Party is placeholder.
 - Niet gebouwd: equipment-granted abilities, start-/finishing-loadouts, classrestricties, durability, battle-itemgebruik, automatische itemstrategieën, revival, groepsheals/-buffs, buff-AI, dispels, drain, ingredientkosten, elemental resistances.
-- Niet gebouwd: shops, NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate).
+- Niet gebouwd: NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate), Tavern-personenselectie, treasure chests.
+- `change_game_scene` wist `_exploration_cache`; of sewer-positie/-state een wereldreis overleeft is niet gevalideerd (`defeated_enemy_squads` is globaal en blijft).
+- World map: `current_city`, `current_location` en `in_city` overlappen; gebruikers niet geïnventariseerd. Controleer met `grep -rn "current_city\|current_location\|in_city" scripts tests`.
+- `city_screen.tscn` koppelt alleen `city_background`; `city_layout` (labelpositie-`.tres`) gekoppeld aan assets/city_layouts/castletown_labels_2026-10-22T11-25-27.tres. Bestemming `world_map` heeft een placeholderpositie.
 - Niet end-to-end gevalideerd: meerdere verbindingen tussen dezelfde maps; bewaarde maps accepteren hun opgeslagen vertrekcel.
 - Ontbreekt: begrensd cache-ontlaadbeleid.
 - Legacy `tacticaltest.gd` heeft nog eigen PartyMenu-aansturing. Ruim gericht op; maak geen tweede controller, geen `ExplorationPartyMenu`, geen extra Party-Autoload.
 - Encounter-party-heal en perception/lockpicks zijn contentwensen, nog geen regels. Ontdekken, openen en loot toekennen blijven afzonderlijke stappen.
 - Dynamisch fakkellicht is backlog (zo nodig `CanvasModulate` + `PointLight2D`).
 - Open vraag: definitieve Chapter-1-resourcebudgetten en content (huidige items, gear en quests zijn prototypes).
-- City/guild-code aanwezig; automatische quest-objective- en guildtests geslaagd.
 - Handmatige city/guild-inputisolatie en city↔sewer-statebehoud nog afzonderlijk te bevestigen.
 - Quest-objectivetest activeert drie expliciete fixtures, niet de volledige catalogus.
 - Guildquest gebruikt alleen de bestaande sewer test-slice corridor+junction, niet het volledige toekomstige dungeon.
 - Guild-inlevering, questrewards en verdere NPC-dialogue ontbreken.
-- Shops met Talk/Buy/Sell, world travel met tijdskosten en tavern-personenselectie zijn nog niet gebouwd.
+
+## City layouts
+- City scene en layouts getest, koppeling met sewer werkt.
+- Art beschikbaar.
+- Guildtest initialiseert CityScreen vóór callbacks die UI vernieuwen.
+- City-background lokaal beschikbaar: `assets/backgrounds/castletown.png`.
+- Koppeling gebeurt via `CityScreen.city_background` in `scenes/city/city_screen.tscn`.
+
+## Minimale dialogue-loop bij sewer-entrance
+- DialogueLine, DialogueChoice en DialogueDefinition zijn Resources.
+- DialogueSession bewaart tijdelijke voortgang zonder wereld-/UI-dependencies.
+- Prototype: opening → één keuze → reactie → afronden.
+- DialogueController leeft onder Main, buiten GameLayer; geen nieuwe Autoload.
+- Bestaande GameLayer-process-mode en Party-blocker worden gebruikt.
+- Escape annuleert zonder resultaat; alleen afronding commit de keuze.
+- GameState bewaart completion en gekozen antwoord in bestaande flags.
+- Resultaat wordt eenmaal vastgelegd en blijft bij kamerwisselingen behouden.
+- Nieuwe game reset flags; disk-save/load is niet geïmplementeerd.
+- Entrance-interactie op (3,3)/(4,3), met Enter/Spatie, getest via Main.
+- Questbanner wacht tijdens dialogue.
+- Geen rewards, statbonussen, definitieve lore of uitgebreide branching.
 
 ## Lokale repositoryhygiëne
 
@@ -167,5 +174,6 @@ Inspecteer dat bestand vóór verwijderen. Gebruik geen `git add .` en geen bred
 
 ## Afsluiten van een milestone
 
-Voeg bovenaan een nieuwe rij toe aan "Afgeronde milestones" met commit en teststatus. Werk "Status" en "Volgende milestone" bij.
+Voeg bovenaan een nieuwe rij toe aan "Afgeronde milestones" met commit en teststatus. Werk "Status" bij.
 Verplaats opgeloste punten uit "Bekende grenzen". Voeg geen nieuwe persona- of werkafspraken toe aan dit bestand.
+

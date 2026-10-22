@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CityLayoutData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/backgrounds/castletown.png" id="1_8xqfn"]
+[ext_resource type="Script" path="res://scripts/domain/city_layout_data.gd" id="2_23qt5"]
+
+[resource]
+script = ExtResource("2_23qt5")
+background = ExtResource("1_8xqfn")
+label_positions = {
+&"adventurers_guild": Vector2(0.34941828, 0.35580856),
+&"castle": Vector2(0.544814, 0.3357506),
+&"home": Vector2(0.51562417, 0.9567282),
+&"sewers": Vector2(0.54805714, 0.5561905),
+&"shop": Vector2(0.07453666, 0.6570453),
+&"tavern": Vector2(0.75481707, 0.6339928),
+&"world_map": Vector2(0.40594786, 0.9609753)
+}

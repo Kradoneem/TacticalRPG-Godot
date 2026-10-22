@@ -7,7 +7,8 @@ enum Kind {
 	TAVERN,
 	CASTLE,
 	HOME,
-	SEWERS
+	SEWERS,
+	WORLD_MAP
 }
 
 @export var destination_id: StringName = &""
