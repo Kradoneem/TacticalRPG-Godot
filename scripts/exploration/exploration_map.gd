@@ -4,6 +4,11 @@ extends "res://scripts/exploration/projected_exploration_map.gd"
 
 const MapRuntimeScript = preload("res://scripts/systems/tactical_map_runtime.gd")
 const ExitControllerScript = preload("res://scripts/exploration/exploration_exit_controller.gd")
+const ChestControllerScript = preload(
+	"res://scripts/exploration/chest_controller.gd"
+)
+
+var _chests: ChestControllerScript
 
 var _runtime: MapRuntimeScript
 var _exits: ExitControllerScript
@@ -31,36 +36,82 @@ func get_enemy_spawns() -> Array[TacticalEnemySpawn]:
 
 func _ready() -> void:
 	super._ready()
+
 	if tactical_grid == null or projection == null or player_marker.squad == null:
 		return
+
 	GameState.current_location = get_location_name()
 	GameState.in_city = false
+
 	_build_runtime_status()
+
 	if player_marker.movement_requested.is_connected(_on_movement_requested):
 		player_marker.movement_requested.disconnect(_on_movement_requested)
+
 	var runtime := MapRuntimeScript.new()
 	add_child(runtime)
+
 	if not runtime.configure(
-		self, player_marker, tactical_grid, projection,
-		get_calibration_prefix(), get_enemy_spawns()
+		self,
+		player_marker,
+		tactical_grid,
+		projection,
+		get_calibration_prefix(),
+		get_enemy_spawns()
 	):
 		runtime.queue_free()
 		player_marker.set_input_enabled(false)
 		_runtime_status.text = "Map configureren mislukt. Controleer Output."
 		return
+
 	_runtime = runtime
 	_runtime.status_changed.connect(_update_runtime_status)
-	_runtime.presentation_active_changed.connect(_on_combat_presentation_active_changed)
+	_runtime.presentation_active_changed.connect(
+		_on_combat_presentation_active_changed
+	)
+
+	var exit_definitions: Array[ExplorationExitData] = get_exit_definitions()
+
 	_exits = ExitControllerScript.new()
 	add_child(_exits)
-	_exits.interaction_active_changed.connect(_on_exit_interaction_active_changed)
+
+	_exits.interaction_active_changed.connect(
+		_on_exit_interaction_active_changed
+	)
 	_exits.travel_requested.connect(_on_exit_travel_requested)
-	if not _exits.configure(player_marker, get_exit_definitions(), _can_interact_with_exit):
+
+	if not _exits.configure(
+		player_marker,
+		exit_definitions,
+		_can_interact_with_exit
+	):
 		_exits.queue_free()
 		_exits = null
 		push_error("Exploration exit configuration failed.")
-	_update_runtime_status()
 
+	var definitions: Array[ChestDefinition] = ChestData.get_chests_for_room(
+		get_calibration_prefix()
+	)
+
+	if not definitions.is_empty():
+		_chests = ChestControllerScript.new()
+		add_child(_chests)
+
+		if not _chests.configure(
+			self,
+			player_marker,
+			tactical_grid,
+			projection,
+			GameState,
+			definitions,
+			exit_definitions,
+			can_open_chest
+		):
+			_chests.queue_free()
+			_chests = null
+			push_error("Chest-configuratie mislukt.")
+
+	_update_runtime_status()
 
 func _on_movement_requested(_direction: Vector2i) -> void:
 	# Runtime turncontroller owns movement, not this composition node.
@@ -170,3 +221,11 @@ func can_show_quest_updates() -> bool:
 	# Allows normal exploration and a quiet alert movement-selection moment.
 	# Tactical action menus, transitions and enemy turns defer the banner.
 	return _runtime.can_open_door()
+
+func can_open_chest() -> bool:
+	return (
+		can_process()
+		and SceneManager.get_current_game_scene() == self
+		and SceneManager.can_open_party_menu()
+		and can_open_party_menu()
+	)

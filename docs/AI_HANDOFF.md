@@ -7,7 +7,9 @@ Werkafspraken staan in de projectpersona, niet hier.
 Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **[?]** niet gevalideerd of nog te bouwen.
 
 ## Status
-- Laatste geteste gameplay-milestone: **Tavern** (`feat: add tavern person selection with repeatable dialogue`). [G] door gebruiker getest.
+- Laatste geteste gameplay-milestone: treasure chests (`feat: add persistent exploration chests with atomic loot`). Automatische test: 0 failures; handmatige acceptatie door gebruiker geslaagd verklaard.
+- Daarvoor: Tavern (`81b053b`), World map (`719925c`), Shops (`796b416`).
+- Volgende milestone: Chapter 1 refinen.
 - Daarvoor: World map (`719925c`), Shops (`796b416`).
 - Volgende milestone [O]: treasure chests, daarna Chapter 1 refinen.
 - Volgorde [O]: world map → Tavern → treasure chests → Chapter 1 refinen.
@@ -24,6 +26,7 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 | Milestone | Kern |
 |---|---|
+| Treasure chests | Door gebruiker getest: automatische test 0 failures en handmatige acceptatie geslaagd. ChestDefinition + ChestData; corridor-prototype op (1,3) met 1 Potion. Adjacent Enter/Spatie tijdens vrije exploration. GameState commit loot en opened-state vóór signals; geen dubbele loot. Opened-state blijft buiten mapcache behouden en reset bij nieuwe game. chest_opened-signal voor latere questkoppeling. Geen sloten, openingseisen, tijdskosten of movement-blocking. |
 | Tavern | Door gebruiker getest. `TavernPerson`/`TavernDefinition` als Resources, `TavernData` (Aldenmoor, Barkeeper + Patron als prototypepersonen, geen lore), `TavernScreen` als subscreen onder `CityScreen` met personen op beeldrelatieve posities, herhaalbare dialogue via Main/DialogueController, `dialogue_result`-hook zonder gameplay-effecten, `CityScreen._sub_screen_open()` voor shop + tavern. Geen tijdskosten, gold, rest of rewards. `tests/test_tavern.gd` aanwezig. |
 | World map | Door gebruiker getest. WorldLocation + WorldMapData (Aldenmoor + 2 prototypelocaties, hub-topologie), GameState.travel_to_location (1 dag/verbinding via advance_day, geen GameplayClock-tick), WorldMapScreen (select/confirm), LocationStubScreen, SceneManager.change_game_scene(path, context) met prepare_location_entry, CityDestination.Kind.WORLD_MAP. tests/test_world_travel.gd aanwezig. |
 | Shops (`796b416`) | Door gebruiker getest. `ShopDefinition`/`ShopOffer` als Resources, `ShopData` koppelt stad + bestemming-ID, `ShopTransaction.resolve()` via `GameState.buy_shop_product`/`sell_shop_product`. `ShopScreen` (Talk / Buy / Sell, confirm-stap) onder `CityScreen`. Zie Ontwerpbesluiten → Shops. `tests/test_shops.gd` aanwezig. |
@@ -133,6 +136,22 @@ World map [G] — gebouwd en getest.
 - Squad defeat, map clear en locatie-mapclear zijn aparte questvoorwaarden, geen extra rewardtriggers.
 - Verzin geen rewarddata.
 
+**Treasure chests [G] — gebouwd en getest**
+- Alleen sewer-exploration; eerste prototypechest in sewer_corridor op (1,3), met 1 Potion.
+- Prototype-loot is nieuwe content, geen Python-migratie of definitieve balans.
+- Openen vanuit een orthogonaal adjacent cel met Enter/Spatie, uitsluitend tijdens vrije exploration.
+- ChestDefinition bevat stabiel, globaal uniek chest-ID, map-ID, cel en loot.
+- GameState.opened_chests bewaart sessiestate buiten de mapcache; nieuwe game reset die state.
+- GameState.open_chest valideert opnieuw en commit loot + opened-state vóór signals.
+- GameState.chest_opened(chest_id) is het aansluitpunt voor latere expliciete questflags.
+- Geen automatische questflags, sloten of openingseisen. chest_opening_error is het latere validatiepunt voor key/lockpick/skill/spell-eisen.
+- Ontdekken is apart; prototypechest is zichtbaar zonder perception-check.
+- Marker is een niet-blokkerende tekstplaceholder op de geprojecteerde cel.
+- Chest-adjacencyzones mogen elkaar of exitcellen niet overlappen.
+- Geen tijdskosten, GameplayClock-ticks, patrolstappen of modal resultaatscherm bij openen.
+- tests/test_chests.gd: 0 failures; handmatige acceptatie door gebruiker geslaagd verklaard.
+- Integratietest laadt Main en TacticalTurnController runtime om vroege compilatie van autoload-afhankelijke scripts te vermijden.
+
 ## Bekende grenzen en backlog [?]
 
 - Formation in Party is placeholder.
@@ -140,7 +159,6 @@ World map [G] — gebouwd en getest.
 - Niet gebouwd: NPC-inlevering, questrewards, progression/level-upabilities, save/load (mapcache is sessiestate), treasure chests.
 - `change_game_scene` wist `_exploration_cache`; of sewer-positie/-state een wereldreis overleeft is niet gevalideerd (`defeated_enemy_squads` is globaal en blijft).
 - World map: `current_city`, `current_location` en `in_city` overlappen; gebruikers niet geïnventariseerd. Controleer met `grep -rn "current_city\|current_location\|in_city" scripts tests`.
-- `city_screen.tscn` koppelt alleen `city_background`; `city_layout` (labelpositie-`.tres`) gekoppeld aan assets/city_layouts/castletown_labels_2026-10-22T11-25-27.tres. Bestemming `world_map` heeft een placeholderpositie.
 - Niet end-to-end gevalideerd: meerdere verbindingen tussen dezelfde maps; bewaarde maps accepteren hun opgeslagen vertrekcel.
 - Ontbreekt: begrensd cache-ontlaadbeleid.
 - Legacy `tacticaltest.gd` heeft nog eigen PartyMenu-aansturing. Ruim gericht op; maak geen tweede controller, geen `ExplorationPartyMenu`, geen extra Party-Autoload.

@@ -17,6 +17,11 @@ signal unit_equipment_changed(unit: Unit)
 signal quest_objective_updated(quest_id: String, objective_id: StringName)
 signal quest_log_changed
 signal quest_progress_reset
+signal chest_opened(chest_id: StringName)
+
+## Session state, independent of retained map instances.
+var opened_chests: Dictionary = {}
+var _chest_transaction_active: bool = false
 
 var party: Array = []
 var item_inventory: Dictionary = {}
@@ -57,6 +62,8 @@ func start_new_game() -> void:
 	squads.clear()
 	exploration_room_states.clear()
 	defeated_enemy_squads.clear()
+	opened_chests.clear()
+	_chest_transaction_active = false
 
 	chapter = 1
 	day = 1.0
@@ -784,3 +791,120 @@ func travel_to_location(destination_id: StringName) -> Dictionary:
 			roundi(WorldMapData.TRAVEL_DAYS)
 		]
 	}
+
+func is_chest_opened(chest_id: StringName) -> bool:
+	return bool(opened_chests.get(chest_id, false))
+
+
+func chest_opening_error(definition: ChestDefinition) -> String:
+	if _chest_transaction_active:
+		return "Er wordt al een chest-opening afgehandeld."
+
+	if definition == null:
+		return "Onbekende chest."
+
+	if is_chest_opened(definition.chest_id):
+		return "Deze chest is al geopend."
+
+	var problem: String = definition.validation_error()
+
+	if not problem.is_empty():
+		return problem
+
+	# Future opening requirements belong before the commit.
+	# No keys, lockpicks, skill/spell checks or costs in this milestone.
+	const MAX_INT: int = 9223372036854775807
+
+	if gold > MAX_INT - definition.gold:
+		return "Goldlimiet bereikt."
+
+	for raw_id: Variant in definition.items:
+		var item_id := StringName(raw_id)
+		var amount: int = int(definition.items[raw_id])
+
+		if get_item_quantity(item_id) > MAX_INT - amount:
+			return "Inventorylimiet bereikt: %s" % item_id
+
+	for raw_id: Variant in definition.equipment:
+		var equipment_id := StringName(raw_id)
+		var amount: int = int(definition.equipment[raw_id])
+
+		if get_equipment_quantity(equipment_id) > MAX_INT - amount:
+			return "Equipmentlimiet bereikt: %s" % equipment_id
+
+	return ""
+
+
+func open_chest(chest_id: StringName) -> Dictionary:
+	var definition: ChestDefinition = ChestData.get_chest(chest_id)
+	var problem: String = chest_opening_error(definition)
+
+	if not problem.is_empty():
+		return {"success": false, "message": problem}
+
+	_chest_transaction_active = true
+
+	var received_items: Dictionary = {}
+	var received_equipment: Dictionary = {}
+	var summary := PackedStringArray()
+
+	# No await, callbacks or signals during this commit.
+	for raw_id: Variant in definition.items:
+		var item_id := StringName(raw_id)
+		var amount: int = int(definition.items[raw_id])
+
+		item_inventory[item_id] = get_item_quantity(item_id) + amount
+		received_items[item_id] = amount
+
+		var item: GameItem = ItemData.get_item(item_id)
+		summary.append("%d × %s" % [amount, item.display_name])
+
+	for raw_id: Variant in definition.equipment:
+		var equipment_id := StringName(raw_id)
+		var amount: int = int(definition.equipment[raw_id])
+
+		equipment_inventory[equipment_id] = (
+			get_equipment_quantity(equipment_id) + amount
+		)
+		received_equipment[equipment_id] = amount
+
+		var gear: Equipment = EquipmentData.get_equipment(equipment_id)
+		summary.append("%d × %s" % [amount, gear.display_name])
+
+	gold += definition.gold
+
+	if definition.gold > 0:
+		summary.append("%d gold" % definition.gold)
+
+	opened_chests[chest_id] = true
+
+	var message: String = (
+		"Chest geopend — leeg."
+		if summary.is_empty()
+		else "Chest geopend — ontvangen: %s." % ", ".join(summary)
+	)
+
+	var result: Dictionary = {
+		"success": true,
+		"message": message,
+		"chest_id": chest_id,
+		"gold": definition.gold,
+		"items": received_items,
+		"equipment": received_equipment
+	}
+
+	# All observers see both opened-state and complete loot.
+	# Reentrant open_chest calls remain blocked during notification.
+	chest_opened.emit(chest_id)
+
+	if definition.gold > 0:
+		gold_changed.emit(gold)
+
+	if not received_items.is_empty():
+		item_inventory_changed.emit()
+
+	if not received_equipment.is_empty():
+		equipment_inventory_changed.emit()
+
+	_chest_transaction_active = false
+	return result
