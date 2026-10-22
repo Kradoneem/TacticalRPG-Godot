@@ -185,29 +185,53 @@ func _build_guild_panel() -> void:
 	heading.add_theme_font_size_override("font_size", 26)
 	_guild_content.add_child(heading)
 
+	# Refresh on a UI boundary, not every frame.
+	GameState.refresh_quest_objectives()
+
+	var quest_id: String = QuestData.GUILD_SEWER_QUEST_ID
+	var quest_status: String = GameState.get_quest_status(quest_id)
+	var ready_to_turn_in: bool = (
+		quest_status == "active"
+		and GameState.are_quest_objectives_achieved(quest_id)
+	)
+
 	var description := Label.new()
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	var quest_status: String = GameState.get_quest_status(
-		QuestData.GUILD_SEWER_QUEST_ID
-	)
+	match quest_status:
+		"inactive":
+			description.text = (
+				"Prototypeopdracht beschikbaar: maak corridor en junction vrij."
+			)
 
-	if quest_status == "inactive":
-		description.text = (
-			"Prototypeopdracht beschikbaar: maak corridor en junction vrij."
-		)
-	else:
-		description.text = (
-			"Sewer investigation: %s. Bekijk de opdracht in het Quest Log."
-			% quest_status
-		)
+		"active":
+			description.text = (
+				"Alle objectives behaald. Spreek de clerk om de opdracht in te leveren."
+				if ready_to_turn_in
+				else "De opdracht is nog niet klaar: maak corridor en junction vrij. "
+				+ "Bekijk de voortgang in het Quest Log."
+			)
+
+		"completed":
+			description.text = (
+				"De sewer-prototypeopdracht is ingeleverd en afgerond. "
+				+ "Er zijn geen questrewards toegekend."
+			)
+
+		_:
+			description.text = "Onbekende queststatus."
 
 	_guild_content.add_child(description)
 
 	var talk := Button.new()
-	talk.text = "Talk to the guild clerk"
+	talk.text = (
+		"Turn in sewer contract"
+		if ready_to_turn_in
+		else "Talk to the guild clerk"
+	)
 	talk.custom_minimum_size = Vector2(0.0, 60.0)
-	talk.disabled = quest_status != "inactive"
+	talk.focus_mode = Control.FOCUS_NONE
+	talk.disabled = quest_status not in ["inactive", "active"]
 	talk.pressed.connect(_on_talk_to_guild_clerk)
 	_guild_content.add_child(talk)
 	_guild_buttons.append(talk)
@@ -215,13 +239,13 @@ func _build_guild_panel() -> void:
 	var back := Button.new()
 	back.text = "Back to city"
 	back.custom_minimum_size = Vector2(0.0, 60.0)
+	back.focus_mode = Control.FOCUS_NONE
 	back.pressed.connect(_show_city)
 	_guild_content.add_child(back)
 	_guild_buttons.append(back)
 
 	_selected_index = 0 if not talk.disabled else 1
 	_refresh_selection()
-
 
 func _get_active_buttons() -> Array[Button]:
 	return _guild_buttons if _viewing_guild else _city_buttons
@@ -372,11 +396,36 @@ func _on_talk_to_guild_clerk() -> void:
 	if (
 		_transitioning
 		or not _viewing_guild
-		or GameState.get_quest_status(
-			QuestData.GUILD_SEWER_QUEST_ID
-		) != "inactive"
+		or _sub_screen_open()
+		or not can_process()
 	):
 		return
+
+	GameState.refresh_quest_objectives()
+
+	var quest_id: String = QuestData.GUILD_SEWER_QUEST_ID
+	var quest_status: String = GameState.get_quest_status(quest_id)
+	var definition: DialogueDefinition
+
+	match quest_status:
+		"inactive":
+			definition = DialogueData.get_guild_sewer_quest_dialogue()
+
+		"active":
+			if not GameState.are_quest_objectives_achieved(quest_id):
+				_build_guild_panel()
+				_status.text = (
+					"Guild Clerk: de opdracht is nog niet klaar. "
+					+ "Maak corridor en junction vrij; bekijk het Quest Log."
+				)
+				return
+
+			definition = DialogueData.get_guild_sewer_turn_in_dialogue()
+
+		_:
+			_build_guild_panel()
+			_status.text = "Deze opdracht is al afgerond."
+			return
 
 	var main: Node = get_tree().current_scene
 
@@ -387,9 +436,10 @@ func _on_talk_to_guild_clerk() -> void:
 	if not bool(main.call(
 		"request_dialogue",
 		self,
-		DialogueData.get_guild_sewer_quest_dialogue()
+		definition
 	)):
 		_status.text = "Dialogue kon niet starten. Controleer Output."
+
 
 func on_dialogue_finished(
 	dialogue_id: StringName,
@@ -412,14 +462,34 @@ func on_dialogue_finished(
 
 		return
 
-	if dialogue_id != DialogueData.GUILD_SEWER_DIALOGUE_ID:
-		return
+	var quest_id: String = QuestData.GUILD_SEWER_QUEST_ID
 
-	if committed and choice_id == &"accept_sewer_contract":
-		GameState.activate_quest(QuestData.GUILD_SEWER_QUEST_ID)
+	match dialogue_id:
+		DialogueData.GUILD_SEWER_DIALOGUE_ID:
+			if committed and choice_id == &"accept_sewer_contract":
+				GameState.activate_quest(quest_id)
+
+		DialogueData.GUILD_SEWER_TURN_IN_DIALOGUE_ID:
+			if committed and choice_id == &"turn_in_sewer_contract":
+				# Revalidates active status and objectives.
+				# No rewards or additional quest flags.
+				GameState.complete_quest(quest_id)
+
+		_:
+			return
 
 	_page_frame = Engine.get_process_frames()
 	_build_guild_panel()
+
+	if dialogue_id == DialogueData.GUILD_SEWER_TURN_IN_DIALOGUE_ID:
+		if not committed:
+			_status.text = "Inlevering niet bevestigd."
+		elif choice_id == &"turn_in_later":
+			_status.text = "Inlevering uitgesteld."
+		elif GameState.get_quest_status(quest_id) == "completed":
+			_status.text = "Seweropdracht ingeleverd. Geen questrewards."
+		else:
+			_status.text = "Inlevering geweigerd: de opdracht is niet klaar."
 
 func _enter_sewers() -> void:
 	if not can_enter_sewers():

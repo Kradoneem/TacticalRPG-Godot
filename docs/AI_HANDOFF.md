@@ -7,11 +7,9 @@ Werkafspraken staan in de projectpersona, niet hier.
 Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **[?]** niet gevalideerd of nog te bouwen.
 
 ## Status
-- Laatste geteste gameplay-milestone: treasure chests (`feat: add persistent exploration chests with atomic loot`). Automatische test: 0 failures; handmatige acceptatie door gebruiker geslaagd verklaard.
-- Daarvoor: Tavern (`81b053b`), World map (`719925c`), Shops (`796b416`).
-- Volgende milestone: Chapter 1 refinen.
-- Daarvoor: World map (`719925c`), Shops (`796b416`).
-- Volgende milestone [O]: treasure chests, daarna Chapter 1 refinen.
+- Laatste geteste gameplay-milestone: guildquest-inlevering (`feat: complete guild sewer quest through turn-in dialogue`).
+- Daarvoor: treasure chests (`405a47e`), Tavern (`81b053b`), World map (`719925c`).
+- Vervolg: Chapter 1 refinen; concrete volgende milestone nog te kiezen.
 - Volgorde [O]: world map → Tavern → treasure chests → Chapter 1 refinen.
 - Buiten deze volgorde: resterende Python-combatpariteit en Save/Load.
 - Combatuitbreidingen en art-polish blijven geparkeerd.
@@ -26,6 +24,7 @@ Legenda: **[G]** in code + door gebruiker getest · **[O]** ontwerpbesluit · **
 
 | Milestone | Kern |
 |---|---|
+| Guildquest-inlevering | Automatische en handmatige tests door gebruiker geslaagd verklaard. Clerk toont voortgang bij onbehaalde objectives en biedt inlevergesprek bij behaalde objectives. Alleen reactiebevestiging voltooit de bestaande sewerquest via GameState.complete_quest; annuleren/later voltooien niets. Geen herhaalde completion, rewards of tijdskosten. tests/test_guild_turn_in.gd aanwezig. |
 | Treasure chests | Door gebruiker getest: automatische test 0 failures en handmatige acceptatie geslaagd. ChestDefinition + ChestData; corridor-prototype op (1,3) met 1 Potion. Adjacent Enter/Spatie tijdens vrije exploration. GameState commit loot en opened-state vóór signals; geen dubbele loot. Opened-state blijft buiten mapcache behouden en reset bij nieuwe game. chest_opened-signal voor latere questkoppeling. Geen sloten, openingseisen, tijdskosten of movement-blocking. |
 | Tavern | Door gebruiker getest. `TavernPerson`/`TavernDefinition` als Resources, `TavernData` (Aldenmoor, Barkeeper + Patron als prototypepersonen, geen lore), `TavernScreen` als subscreen onder `CityScreen` met personen op beeldrelatieve posities, herhaalbare dialogue via Main/DialogueController, `dialogue_result`-hook zonder gameplay-effecten, `CityScreen._sub_screen_open()` voor shop + tavern. Geen tijdskosten, gold, rest of rewards. `tests/test_tavern.gd` aanwezig. |
 | World map | Door gebruiker getest. WorldLocation + WorldMapData (Aldenmoor + 2 prototypelocaties, hub-topologie), GameState.travel_to_location (1 dag/verbinding via advance_day, geen GameplayClock-tick), WorldMapScreen (select/confirm), LocationStubScreen, SceneManager.change_game_scene(path, context) met prepare_location_entry, CityDestination.Kind.WORLD_MAP. tests/test_world_travel.gd aanwezig. |
@@ -151,6 +150,19 @@ World map [G] — gebouwd en getest.
 - Geen tijdskosten, GameplayClock-ticks, patrolstappen of modal resultaatscherm bij openen.
 - tests/test_chests.gd: 0 failures; handmatige acceptatie door gebruiker geslaagd verklaard.
 - Integratietest laadt Main en TacticalTurnController runtime om vroege compilatie van autoload-afhankelijke scripts te vermijden.
+
+**Guildquest-inlevering [G] — gebouwd en getest**
+- Bestaande sewer-prototypequest blijft beperkt tot corridor en junction.
+- Clerk biedt acceptatie bij inactive, voortgangsmelding bij active met onbehaalde objectives en inlevergesprek bij active met behaalde objectives.
+- Inlevergesprek heeft een eigen herhaalbaar dialogue-ID.
+- Alleen afronden van de reactie op turn_in_sewer_contract roept GameState.complete_quest aan.
+- GameState valideert active status en objectives opnieuw.
+- Annuleren en turn_in_later voltooien niets.
+- Completed quest is niet opnieuw inleverbaar.
+- Dialogue-flags zijn gespreksresultaten; quest_states bepaalt questcompletion.
+- Geen rewards, nieuwe objectives, lore, sewer-toegangsgate of tijdskosten.
+- tests/test_guild_turn_in.gd gebruikt echte Main/dialogue-routing met expliciete objective-fixtures; dungeoncombat blijft handmatige acceptatie.
+- Automatische en handmatige tests nog niet bevestigd.
 
 ## Bekende grenzen en backlog [?]
 

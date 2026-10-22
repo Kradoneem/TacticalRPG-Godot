@@ -3,6 +3,7 @@ extends RefCounted
 
 const ENTRANCE_DIALOGUE_ID: StringName = &"sewer_entrance_test"
 const GUILD_SEWER_DIALOGUE_ID: StringName = &"guild_sewer_quest"
+const GUILD_SEWER_TURN_IN_DIALOGUE_ID: StringName = &"guild_sewer_turn_in"
 
 
 static func get_entrance_dialogue() -> DialogueDefinition:
@@ -63,6 +64,38 @@ static func get_guild_sewer_quest_dialogue() -> DialogueDefinition:
 		DialogueLine.create(
 			"Guild Clerk",
 			"Prima. De opdracht blijft beschikbaar."
+		)
+	))
+
+	return dialogue
+
+static func get_guild_sewer_turn_in_dialogue() -> DialogueDefinition:
+	var dialogue := DialogueDefinition.new()
+	dialogue.dialogue_id = GUILD_SEWER_TURN_IN_DIALOGUE_ID
+	dialogue.allow_replay = true
+
+	dialogue.lines.append(DialogueLine.create(
+		"Guild Clerk",
+		"De corridor en junction van de sewer test-slice zijn vrijgemaakt. "
+		+ "Willen jullie de prototypeopdracht nu inleveren?"
+	))
+
+	dialogue.choices.append(DialogueChoice.create(
+		&"turn_in_sewer_contract",
+		"Ja. We leveren de opdracht in.",
+		DialogueLine.create(
+			"Guild Clerk",
+			"Bevestig deze reactie om de opdracht af te ronden. "
+			+ "Dit prototype kent geen questrewards toe."
+		)
+	))
+
+	dialogue.choices.append(DialogueChoice.create(
+		&"turn_in_later",
+		"Niet nu. We komen later terug.",
+		DialogueLine.create(
+			"Guild Clerk",
+			"Prima. De opdracht blijft klaarstaan om in te leveren."
 		)
 	))
 
